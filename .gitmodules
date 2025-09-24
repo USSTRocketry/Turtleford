@@ -1,0 +1,9 @@
+[submodule "Lib/nanopb"]
+	path = Lib/nanopb
+	url = git@github.com:nanopb/nanopb.git
+[submodule "Lib/HAL"]
+	path = Lib/HAL
+	url = git@github.com:USSTRocketry/HAL.git
+[submodule "Lib/Bricks"]
+	path = Lib/Bricks
+	url = git@github.com:USSTRocketry/Bricks.git
