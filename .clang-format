@@ -1,3 +1,4 @@
+# Alignment
 AlignAfterOpenBracket: Align
 AlignArrayOfStructures: Right
 AlignConsecutiveAssignments: AcrossComments
@@ -5,44 +6,58 @@ AlignConsecutiveBitFields: AcrossComments
 AlignConsecutiveMacros: AcrossComments
 AlignEscapedNewlines: Left
 AlignOperands: Align
-AlignTrailingComments: true
+
+# Comments
+ReflowComments: true
+
+# Short blocks and functions
 AllowShortBlocksOnASingleLine: Always
 AllowShortFunctionsOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+
+# Line breaking / braces
 AlwaysBreakTemplateDeclarations: Yes
-BinPackArguments: false
-BinPackParameters: false
-BitFieldColonSpacing: Both
 BreakBeforeBraces: Allman
-BreakBeforeConceptDeclarations: true
 BreakConstructorInitializers: AfterColon
 BreakInheritanceList: AfterComma
-Cpp11BracedListStyle: true
-ColumnLimit: 120
-EmptyLineBeforeAccessModifier: Always
-FixNamespaceComments: true
-AccessModifierOffset: -4
-IndentAccessModifiers: false
-IndentCaseLabels: true
-IndentExternBlock: NoIndent
-IndentGotoLabels: false
-IndentPPDirectives: BeforeHash
-IndentRequires: true
-IndentWidth: 4
-IndentWrappedFunctionNames: true
-LambdaBodyIndentation: Signature
-NamespaceIndentation: None
-PackConstructorInitializers: NextLine
+
+# Bin packing
+BinPackArguments: false
+BinPackParameters: false
+
+# Bitfields and spacing
+BitFieldColonSpacing: Both
 PointerAlignment: Left
 ReferenceAlignment: Pointer
-ReflowComments: true
-SortIncludes: Never
-SortUsingDeclarations: true
 SpaceAfterCStyleCast: true
 SpaceBeforeAssignmentOperators: true
 SpaceBeforeCpp11BracedList: true
+Cpp11BracedListStyle: true
+
+# Indentation
+IndentWidth: 4
 TabWidth: 4
 UseTab: Never
+IndentCaseLabels: true
+IndentGotoLabels: false
+IndentExternBlock: NoIndent
+IndentPPDirectives: BeforeHash
+IndentWrappedFunctionNames: true
+LambdaBodyIndentation: Signature
+NamespaceIndentation: None
+AccessModifierOffset: -4
+
+# Column / formatting
+ColumnLimit: 120
+EmptyLineBeforeAccessModifier: Always
+FixNamespaceComments: true
+PackConstructorInitializers: NextLine
+
+# Includes / using
+SortIncludes: Never
+SortUsingDeclarations: true
+
+# Brace wrapping
 BraceWrapping:
   AfterCaseLabel: true
   BeforeCatch: true

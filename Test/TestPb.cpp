@@ -50,21 +50,22 @@ TEST(ProtoEncodeTest, ProtoEncodeLogMessage)
 
 TEST(ProtoDecodeTest, ProtoDecodeMainMessage)
 {
-    std::string test_str = RNG.String(RNG.Value<uint8_t>());
-    const auto status    = RNG.Value<uint32_t>();
-    const auto data      = ra::turtleford::PbGen_DebugMsg(status, &test_str);
+    const std::string test_str = RNG.String(RNG.Value<uint8_t>());
+    const auto status          = RNG.Value<uint32_t>();
+    const auto data            = ra::turtleford::PbGen_DebugMsg(status, &test_str);
 
     const auto encoded_data = ra::turtleford::ProtoEncode(data);
 
     // Decode the message
     const Proto_MainMessage decoded_msg = ra::turtleford::ProtoDecode_MainMessage(encoded_data);
-    const auto& s                       = *static_cast<std::string*>(decoded_msg.message_type.debug_msg.msg.arg);
+    const auto s = std::unique_ptr<std::string>(static_cast<std::string*>(decoded_msg.message_type.debug_msg.msg.arg));
 
     // Verify that the decoded message contains the expected data
     ASSERT_EQ(decoded_msg.which_message_type, Proto_MainMessage_debug_msg_tag);
     ASSERT_EQ(decoded_msg.message_type.debug_msg.status, status);
-    ASSERT_EQ(s, test_str);
+    ASSERT_EQ(*s, test_str);
 }
+
 TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
 {
     std::string test_str = RNG.String(RNG.Value<uint8_t>());
@@ -79,14 +80,15 @@ TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
     // Decode the LogMessage
     const Proto_LogMessage decoded_log_msg = ra::turtleford::ProtoDecode_LogMessage(encoded_data);
 
-    const auto& s = *static_cast<std::string*>(decoded_log_msg.main_message.message_type.debug_msg.msg.arg);
+    const auto s = std::unique_ptr<std::string>(
+        static_cast<std::string*>(decoded_log_msg.main_message.message_type.debug_msg.msg.arg));
 
     // Verify if the LogMessage is correctly decoded
     ASSERT_EQ(decoded_log_msg.time_stamp, timestamp);
     ASSERT_EQ(decoded_log_msg.severity, severity);
     ASSERT_EQ(decoded_log_msg.main_message.which_message_type, Proto_MainMessage_debug_msg_tag);
     ASSERT_EQ(decoded_log_msg.main_message.message_type.debug_msg.status, status);
-    ASSERT_EQ(s, test_str);
+    ASSERT_EQ(*s, test_str);
 }
 
 TEST(ProtoDecodeTest, ProtoDecodeFailure)

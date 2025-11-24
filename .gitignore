@@ -4,6 +4,8 @@
 .vscode/
 .cache/
 
+.clangd
+
 out/
 [Bb]uild*/
 cmake-build-debug/
