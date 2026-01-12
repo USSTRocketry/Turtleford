@@ -2,7 +2,7 @@
 
 #include <cstdint>
 // currently no support for format
-#include <format>
+// #include <format>
 #include <span>
 #include <vector>
 #include <string_view>
@@ -23,7 +23,7 @@ public:
     // Do not forget to update the severity map
     enum class Severity : SeverityType
     {
-        Verbose,
+        Verbose = 0,
         Info,
         Warn,
         Error
@@ -56,10 +56,14 @@ public:
         return false;
     }
 
-    void RegisterCallback(StorageWriter Cbck) {}
+    void RegisterCallback(StorageWriter Cb) { m_Buffer.RegisterCallback(Cb); }
 
 private:
     Logger() {}
+    Logger(Logger&)             = delete;
+    Logger(Logger&&)            = delete;
+    Logger operator=(Logger&)   = delete;
+    Logger& operator=(Logger&&) = delete;
 
 private:
     BufferType m_Buffer;
