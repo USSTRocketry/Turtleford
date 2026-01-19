@@ -57,7 +57,9 @@ TEST(ProtoDecodeTest, ProtoDecodeMainMessage)
     const auto encoded_data = ra::turtleford::ProtoEncode(data);
 
     // Decode the message
-    const Proto_MainMessage decoded_msg = ra::turtleford::ProtoDecode_MainMessage(encoded_data);
+    const auto decode = ra::turtleford::ProtoDecode_MainMessage(encoded_data);
+    ASSERT_TRUE(decode.has_value());
+    const Proto_MainMessage decoded_msg = decode.value();
     const auto s = std::unique_ptr<std::string>(static_cast<std::string*>(decoded_msg.message_type.debug_msg.msg.arg));
 
     // Verify that the decoded message contains the expected data
@@ -78,7 +80,9 @@ TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
     const auto encoded_data = ra::turtleford::ProtoEncode(timestamp, severity, data);
 
     // Decode the LogMessage
-    const Proto_LogMessage decoded_log_msg = ra::turtleford::ProtoDecode_LogMessage(encoded_data);
+    const auto Decode = ra::turtleford::ProtoDecode_LogMessage(encoded_data);
+    ASSERT_TRUE(Decode.has_value());
+    const Proto_LogMessage decoded_log_msg = Decode.value();
 
     const auto s = std::unique_ptr<std::string>(
         static_cast<std::string*>(decoded_log_msg.main_message.message_type.debug_msg.msg.arg));
@@ -93,9 +97,8 @@ TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
 
 TEST(ProtoDecodeTest, ProtoDecodeFailure)
 {
-    std::array<std::byte, 1024> buffer;
+    const auto buffer = RNG.ByteVector(RNG.Value(0, 255));
 
-    const Proto_MainMessage decoded_msg = ra::turtleford::ProtoDecode_MainMessage(buffer);
-    // Assert that decoding fails and returns an empty message (or handles the error gracefully).
-    ASSERT_EQ(decoded_msg.which_message_type, 0); // No valid message type
+    const auto decode = ra::turtleford::ProtoDecode_MainMessage(buffer);
+    ASSERT_FALSE(decode.has_value());
 }

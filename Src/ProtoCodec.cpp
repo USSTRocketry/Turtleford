@@ -68,24 +68,24 @@ uint32_t
     return PbEncode_Internal(Msg, Buffer);
 }
 
-Proto_MainMessage ProtoDecode_MainMessage(std::span<const std::byte> Data)
+std::optional<Proto_MainMessage> ProtoDecode_MainMessage(std::span<const std::byte> Data)
 {
     Proto_MainMessage Msg;
     Msg.cb_message_type.funcs.decode = PbDecode_Proto_MainMessage;
 
     auto Stream = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(Data.data()), Data.size());
-    if (!pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg)) { return {}; }
+    if (!pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg)) { return std::nullopt; }
 
     return Msg;
 }
 
-Proto_LogMessage ProtoDecode_LogMessage(std::span<const std::byte> Data)
+std::optional<Proto_LogMessage> ProtoDecode_LogMessage(std::span<const std::byte> Data)
 {
     Proto_LogMessage Msg;
     Msg.main_message.cb_message_type.funcs.decode = PbDecode_Proto_MainMessage;
 
     auto Stream = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(Data.data()), Data.size());
-    if (!pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg)) { return {}; }
+    if (!pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg)) { return std::nullopt; }
 
     return Msg;
 }
