@@ -20,15 +20,19 @@ target_include_directories(proto
 
 # =================== LIB dependencies ======================
 target_link_libraries(${PROJECT_NAME} PRIVATE proto)
-# target_link_libraries(${PROJECT_NAME} PRIVATE HAL)
 
 add_subdirectory(Bricks)
 target_link_libraries(${PROJECT_NAME} PRIVATE Bricks)
 
+# Hardcode HAL platform for this repo
+set(USST_PLATFORM "MOCK" CACHE STRING "Hard coding HAL")
+add_subdirectory(HAL)
+target_link_libraries(${PROJECT_NAME} PRIVATE HAL)
+
+# ================== Test dependency =====================
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-  # ================== Test dependency =====================
   add_library(LibDependency INTERFACE)
 
   # Add link dependencies for anything linking LibDependency
-  target_link_libraries(LibDependency INTERFACE proto Bricks)
+  target_link_libraries(LibDependency INTERFACE proto Bricks HAL)
 endif()
