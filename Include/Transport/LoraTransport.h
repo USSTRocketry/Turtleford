@@ -1,7 +1,12 @@
 #pragma once
 
+#include <cstddef>
+#include <memory>
 #include <span>
 #include <vector>
+#include <array>
+#include <algorithm>
+#include <limits>
 
 #include "TransferSession.h"
 #include "CircularBuffer.h"
@@ -9,8 +14,6 @@
 
 namespace ra::turtleford
 {
-class LoraTransferManager;
-
 /**
  * @brief Configuration for LoRa transfer sessions.
  *
@@ -19,8 +22,14 @@ class LoraTransferManager;
  */
 struct LoraTransferConfig final : public ITransferConfig
 {
-    /** @brief Peer identifier for routing messages to specific devices. */
-    uint8_t PeerId = 0;
+    struct
+    {
+        uint8_t SelfId;
+        /** @brief Peer identifier for routing messages to specific devices. */
+        uint8_t RecvFrom;
+        /** @brief Local identifier for this device in the session. */
+        uint8_t SendTo;
+    } Addr {};
 
     /** @brief User-defined context pointer. Not managed by the transport. */
     void* Ctx = nullptr;
@@ -33,7 +42,10 @@ public:
     std::unique_ptr<ITransferConfig> Clone() const override { return std::make_unique<LoraTransferConfig>(*this); }
 
 public:
-    LoraTransferConfig(uint8_t Id, void* Context) : PeerId(Id), Ctx(Context) {};
+    LoraTransferConfig(uint8_t Peer, uint8_t Local, void* Context) :
+        Addr {.SelfId = Local, .RecvFrom = Peer, .SendTo = Peer}, Ctx(Context)
+    {
+    }
     LoraTransferConfig(const LoraTransferConfig&)            = default;
     LoraTransferConfig& operator=(const LoraTransferConfig&) = default;
 };
@@ -50,51 +62,34 @@ class LoraTransferManager final : public ITransferManager,
 {
 private:
     /**
-     * @brief Represents a LoRa communication session.
+     * @brief Represents a thin public-facing LoRa communication session.
      *
-     * A session provides a handle for sending and receiving data through LoRa.
-     * Multiple sessions can be created for different peers. Sessions are
-     * managed by a LoraTransferManager and should be created through it.
+     * The session is a lightweight wrapper (id + weak manager). Per-session state
+     * (config, callback) is stored in ManagedSession to improve locality and
+     * reduce per-session footprint.
      */
     class LoraTransferSession final : public ITransferSession
     {
     public:
         bool Send(std::span<const std::byte> Data) override;
-        void RegisterCallback(ReceiveCallback Cb) override { m_Callback = Cb; }
-        bool IsOpen() override { return !m_Token.expired() && !m_Manager.expired(); };
-        size_t ID() const override { return m_SessionId; }
+        void RegisterCallback(ITransferSession::ReceiveCallback Cb) override;
+        bool IsOpen() override;
+        size_t ID() const override;
         TransportType Transport() const override { return TransportType::Lora; }
-        const ITransferConfig& Config() const override { return *m_TransferConfig; }
+        const ITransferConfig& Config() const override;
+
+    public:
+        ~LoraTransferSession() = default;
 
     private:
-        struct SessionToken
+        LoraTransferSession(std::weak_ptr<LoraTransferManager> Manager, size_t SessionId) :
+            m_Manager(std::move(Manager)), m_SessionId(SessionId)
         {
-        };
-        LoraTransferSession(std::weak_ptr<LoraTransferManager> Manager,
-                            std::unique_ptr<LoraTransferConfig> Cfg,
-                            std::shared_ptr<SessionToken> Token,
-                            size_t SessionId) :
-            m_TransferConfig(std::move(Cfg)),
-            m_Manager(std::move(Manager)),
-            m_Token(std::move(Token)),
-            m_SessionId(SessionId)
-        {
-        }
-
-        void Deliver(const TransferContext& Ctx, std::span<const std::byte> Payload)
-        {
-            if (m_Callback) m_Callback(Ctx, Payload);
         }
 
     private:
         size_t m_SessionId {};
-        ITransferSession::ReceiveCallback m_Callback {};
-        std::unique_ptr<LoraTransferConfig> m_TransferConfig {};
         std::weak_ptr<LoraTransferManager> m_Manager;
-        std::weak_ptr<SessionToken> m_Token;
-
-        // Only the manager should invoke Deliver to forward received payloads to the
-        // session's callback. Keep this private to avoid exposing extra API surface.
 
         friend class LoraTransferManager;
     };
@@ -126,7 +121,7 @@ public:
      * The session is automatically added to the active session list
      * The manager takes ownership of the config.
      */
-    std::shared_ptr<ITransferSession> CreateSession(std::unique_ptr<ITransferConfig> cfg) override;
+    std::shared_ptr<ITransferSession> CreateSession(std::unique_ptr<ITransferConfig> Cfg) override;
 
     /**
      * @brief Closes and removes a specific session from the manager.
@@ -139,7 +134,7 @@ public:
     /**
      * @brief Get a session by its ID.
      */
-    std::shared_ptr<ITransferSession> GetSession(size_t id) const override;
+    std::shared_ptr<ITransferSession> GetSession(size_t Id) const override;
 
     /**
      * @brief Processes queued messages and handles radio operations.
@@ -163,22 +158,37 @@ public:
     LoraTransferManager(std::unique_ptr<ITelemetryRadio> Radio) : m_Radio(std::move(Radio)) {}
 
 private:
-    bool Send(std::span<const std::byte> Data)
-    {
-        // the HAL is currently not thread safe, so all send must be synchronized through manager
-        return m_OutgoingMessageQueue.Queue(std::vector<std::byte> {Data.begin(), Data.end()});
-    };
+    static constexpr auto LoraMTU = 512;
+    static_assert(LoraMTU > 0, "LoraMTU must be a positive value");
+
+    bool Send(size_t SessionId, std::span<const std::byte> Data);
+
+    // Helper methods to set per-session state.
+    void SetCallbackForSession(size_t Id, ITransferSession::ReceiveCallback Cb);
+    bool IsSessionAlive(size_t Id) const;
+    const ITransferConfig* GetConfig(size_t Id) const;
 
 private:
     struct ManagedSession
     {
         std::shared_ptr<LoraTransferSession> Session;
-        std::shared_ptr<LoraTransferSession::SessionToken> Token;
+        ITransferSession::ReceiveCallback Callback;
+        std::unique_ptr<LoraTransferConfig> Config;
     };
 
-    std::vector<ManagedSession> m_Sessions {};
-    // messages are directly forwarded
-    ra::bricks::CircularBuffer<std::vector<std::byte>> m_OutgoingMessageQueue {};
+    struct OutgoingMessage
+    {
+        uint8_t DestinationId;
+        uint8_t SourceId;
+        uint16_t Length;
+        std::array<std::byte, LoraMTU> Data;
+    };
+    static_assert(LoraMTU <= std::numeric_limits<decltype(OutgoingMessage::Length)>::max(),
+                  "LoraMTU exceeds capacity of OutgoingMessage::Length");
+
+private:
+    std::vector<ManagedSession> m_Sessions {}; // Active sessions
+    ra::bricks::CircularBuffer<OutgoingMessage> m_OutgoingMessageQueue {};
 
     std::unique_ptr<ITelemetryRadio> m_Radio;
     // Next session id to assign (monotonic)

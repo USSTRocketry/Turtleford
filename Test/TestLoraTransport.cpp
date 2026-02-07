@@ -31,7 +31,7 @@ TEST(LoraTransportTest, CreateSessionAndLifecycle)
     auto Radio   = std::make_unique<NiceMock<MockRadio>>();
     // Keep a raw pointer if we need to set expectations before move
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Config  = std::make_unique<LoraTransferConfig>(10, nullptr);
+    auto Config  = std::make_unique<LoraTransferConfig>(10, 0, nullptr);
     auto Session = Manager->CreateSession(std::move(Config));
 
     ASSERT_NE(Session, nullptr);
@@ -48,16 +48,46 @@ TEST(LoraTransportTest, SendData)
     auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20, nullptr));
 
     std::vector<std::byte> Data = {std::byte {0x01}, std::byte {0x02}, std::byte {0x03}};
 
-    // Expect radio send to be called when Process is run
     EXPECT_CALL(*RadioPtr, send(_, _)).Times(1).WillOnce(Return(true));
 
     EXPECT_TRUE(Session->Send(Data));
 
     Manager->Process();
+}
+
+TEST(LoraTransportTest, Send_MultipleSessions_SetsAddressesCorrectly)
+{
+    auto Radio     = std::make_unique<NiceMock<MockRadio>>();
+    auto* RadioPtr = Radio.get();
+
+    auto Manager  = std::make_shared<LoraTransferManager>(std::move(Radio));
+    // Peer 10, Local 1
+    auto Session1 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 1, nullptr));
+    // Peer 20, Local 2
+    auto Session2 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(20, 2, nullptr));
+
+    std::vector<std::byte> Data1 = {std::byte {0xAA}};
+    std::vector<std::byte> Data2 = {std::byte {0xBB}};
+
+    EXPECT_TRUE(Session1->Send(Data1));
+    EXPECT_TRUE(Session2->Send(Data2));
+
+    {
+        testing::InSequence seq;
+
+        // Expect Session 1 send
+        EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(true));
+
+        // Expect Session 2 send
+        EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(true));
+    }
+
+    Manager->Process(); // Sends first message
+    Manager->Process(); // Sends second message
 }
 
 // ReceiveData test moved to later in the file to keep receive-related tests grouped together.
@@ -66,7 +96,7 @@ TEST(LoraTransportTest, GetSessionLifecycle)
 {
     auto Radio   = std::make_unique<NiceMock<MockRadio>>();
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
 
     ASSERT_NE(Session, nullptr);
     auto Id    = Session->ID();
@@ -85,8 +115,8 @@ TEST(LoraTransportTest, SessionIDs_AreUnique)
     auto Radio   = std::make_unique<NiceMock<MockRadio>>();
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
 
-    auto S1 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
-    auto S2 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto S1 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
+    auto S2 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
 
     ASSERT_NE(S1, nullptr);
     ASSERT_NE(S2, nullptr);
@@ -110,18 +140,21 @@ TEST(LoraTransportTest, Send_RetriesUntilSuccess)
     auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(55, 66, nullptr));
 
     std::vector<std::byte> Data = {std::byte {0x10}};
 
-    // First send fails, second succeeds — ensure queue retains message on failure
-    EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(false)).WillOnce(Return(true));
+    // First send fails
+    EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(false));
 
     EXPECT_TRUE(Session->Send(Data));
 
     // First Process -> send returns false (message stays in queue)
     Manager->Process();
+
     // Second Process -> send returns true (message dequeued)
+    EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(true));
+
     Manager->Process();
 }
 
@@ -131,7 +164,7 @@ TEST(LoraTransportTest, Send_EmptyData_AllowsEmptyPayload)
     auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
 
     std::vector<std::byte> Data = {};
 
@@ -142,44 +175,47 @@ TEST(LoraTransportTest, Send_EmptyData_AllowsEmptyPayload)
     Manager->Process();
 }
 
-TEST(LoraTransportTest, Receive_DispatchToAllSessions)
+TEST(LoraTransportTest, Receive_DispatchesToCorrectSession)
 {
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
     auto* RadioPtr = Radio.get();
 
     auto Manager  = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session1 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(1, nullptr));
-    auto Session2 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(2, nullptr));
+    auto Session1 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(1, 0, nullptr)); // Peer 1
+    auto Session2 = Manager->CreateSession(std::make_unique<LoraTransferConfig>(2, 0, nullptr)); // Peer 2
 
     int Called1 = 0;
     int Called2 = 0;
 
     Session1->RegisterCallback(
-        [&](const TransferContext&, std::span<const std::byte> payload)
+        [&](const TransferContext& ctx, std::span<const std::byte> payload)
         {
             Called1++;
-            EXPECT_EQ(payload.size(), 3);
+            // With raw packets, we assume it matches the session config
+            EXPECT_EQ(ctx.SourceID, 1);
+            EXPECT_EQ(payload.size(), 2);
         });
     Session2->RegisterCallback(
-        [&](const TransferContext&, std::span<const std::byte> payload)
+        [&](const TransferContext& ctx, std::span<const std::byte> payload)
         {
             Called2++;
-            EXPECT_EQ(payload.size(), 3);
+            EXPECT_EQ(ctx.SourceID, 2);
+            EXPECT_EQ(payload.size(), 2);
         });
 
     EXPECT_CALL(*RadioPtr, receive(_, _, _))
         .WillOnce(
             [](uint8_t* buffer, size_t maxLen, size_t& outLen)
             {
-                if (maxLen < 3) { return false; }
-                buffer[0] = 0x11;
-                buffer[1] = 0x22;
-                buffer[2] = 0x33;
-                outLen    = 3;
+                if (maxLen < 2) { return false; }
+                buffer[0] = 0xAA; // Raw Payload
+                buffer[1] = 0xBB;
+                outLen    = 2;
                 return true;
             })
         .WillRepeatedly(Return(false));
 
+    // Process calls ALL callbacks because we can't filter without headers
     Manager->Process();
 
     EXPECT_EQ(Called1, 1);
@@ -190,7 +226,7 @@ TEST(LoraTransportTest, SendQueue_Full_RejectsExcess)
 {
     auto Radio   = std::make_unique<NiceMock<MockRadio>>();
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
 
     std::vector<std::byte> Data = {std::byte {0x55}};
 
@@ -213,15 +249,18 @@ TEST(LoraTransportTest, ReceiveData)
     auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    // PeerId 0xAA (170)
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0xAA, 0, nullptr));
 
     bool CallbackCalled = false;
     Session->RegisterCallback(
-        [&](const TransferContext&, std::span<const std::byte> payload)
+        [&](const TransferContext& ctx, std::span<const std::byte> payload)
         {
             CallbackCalled = true;
+            // Verify SourceID matches the PeerId from config (blind assumption)
+            EXPECT_EQ(ctx.SourceID, 0xAA);
             EXPECT_EQ(payload.size(), 2);
-            EXPECT_EQ(payload[0], std::byte {0xAA});
+            EXPECT_EQ(payload[0], std::byte {0xAA}); // Raw data
             EXPECT_EQ(payload[1], std::byte {0xBB});
         });
 
@@ -230,7 +269,7 @@ TEST(LoraTransportTest, ReceiveData)
             [](uint8_t* buffer, size_t maxLen, size_t& outLen)
             {
                 if (maxLen < 2) { return false; }
-                buffer[0] = 0xAA;
+                buffer[0] = 0xAA; // Raw Data
                 buffer[1] = 0xBB;
                 outLen    = 2;
                 return true;
@@ -251,7 +290,7 @@ TEST(LoraTransportTest, SessionScope_ManagerKeepsSessionAlive)
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     size_t id    = 0;
     {
-        auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(5, nullptr));
+        auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(5, 0, nullptr));
         ASSERT_NE(Session, nullptr);
         id = Session->ID();
     }
@@ -275,7 +314,7 @@ TEST(LoraTransportTest, SessionOutlivesManager_SendsThenFailsAfterScope)
         auto Radio   = std::make_unique<NiceMock<MockRadio>>();
         auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
 
-        Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(3, nullptr));
+        Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(3, 0, nullptr));
         ASSERT_NE(Session, nullptr);
         EXPECT_TRUE(Session->IsOpen());
 
@@ -298,7 +337,7 @@ TEST(LoraTransportTest, SessionScopedButManagerLives_CanRetrieveAndSend)
 
     size_t sessionId = 0;
     {
-        auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(7, nullptr));
+        auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(7, 0, nullptr));
         ASSERT_NE(Session, nullptr);
         sessionId = Session->ID();
 
@@ -325,7 +364,7 @@ TEST(LoraTransportTest, ManagerDestruction_ExpiresSessions)
 {
     auto Radio   = std::make_unique<NiceMock<MockRadio>>();
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
 
     ASSERT_NE(Session, nullptr);
     EXPECT_TRUE(Session->IsOpen());
@@ -346,12 +385,13 @@ TEST(LoraTransportTest, SessionConfigHasValues)
     auto Radio   = std::make_unique<NiceMock<MockRadio>>();
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
 
-    auto Config  = std::make_unique<LoraTransferConfig>(55, &SomeCtx);
+    auto Config  = std::make_unique<LoraTransferConfig>(55, 1, &SomeCtx); // LocalId 1
     auto Session = Manager->CreateSession(std::move(Config));
     ASSERT_NE(Session, nullptr);
 
     const auto& Cfg = static_cast<const LoraTransferConfig&>(Session->Config());
-    EXPECT_EQ(Cfg.PeerId, 55);
+    EXPECT_EQ(Cfg.Addr.RecvFrom, 55);
+    EXPECT_EQ(Cfg.Addr.SelfId, 1);
     EXPECT_EQ(Cfg.Ctx, &SomeCtx);
 }
 
@@ -359,7 +399,7 @@ TEST(LoraTransportTest, Close_ReturnsFalseOnSecondClose)
 {
     auto Radio   = std::make_unique<NiceMock<MockRadio>>();
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
 
     ASSERT_NE(Session, nullptr);
     EXPECT_TRUE(Manager->Close(*Session));
@@ -382,7 +422,7 @@ TEST(LoraTransportTest, SendFailsAfterCloseAndNoRadioActivity)
     auto* RadioPtr = Radio.get();
     auto Manager   = std::make_shared<LoraTransferManager>(std::move(Radio));
 
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
     ASSERT_NE(Session, nullptr);
 
     // Close the session and ensure further sends fail and no radio send occurs
@@ -401,7 +441,7 @@ TEST(LoraTransportTest, Close_OnDifferentManagerReturnsFalse)
 {
     auto Radio1   = std::make_unique<NiceMock<MockRadio>>();
     auto Manager1 = std::make_shared<LoraTransferManager>(std::move(Radio1));
-    auto Session  = Manager1->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session  = Manager1->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
     ASSERT_NE(Session, nullptr);
 
     auto Radio2   = std::make_unique<NiceMock<MockRadio>>();
@@ -416,12 +456,12 @@ TEST(LoraTransportTest, CallbackContextContainsSessionAndType)
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
     auto* RadioPtr = Radio.get();
     auto Manager   = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session   = Manager->CreateSession(std::make_unique<LoraTransferConfig>(9, nullptr));
+    auto Session   = Manager->CreateSession(std::make_unique<LoraTransferConfig>(9, 0, nullptr));
     ASSERT_NE(Session, nullptr);
 
     bool CallbackCalled = false;
     Session->RegisterCallback(
-        [&](const TransferContext& Ctx, std::span<const std::byte> payload)
+        [&](const TransferContext& Ctx, std::span<const std::byte>)
         {
             CallbackCalled = true;
             EXPECT_EQ(Ctx.Type, TransportType::Lora);
@@ -450,7 +490,7 @@ TEST(LoraTransportTest, ManagerSendDirectlyQueuesAndSends)
     auto* RadioPtr = Radio.get();
     auto Manager   = std::make_shared<LoraTransferManager>(std::move(Radio));
 
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
     ASSERT_NE(Session, nullptr);
 
     std::vector<std::byte> Data = {std::byte {0x01}};
@@ -470,8 +510,8 @@ TEST(LoraTransportTest, MultipleManagers_IsolatedRadios)
     auto* R2      = Radio2.get();
     auto Manager2 = std::make_shared<LoraTransferManager>(std::move(Radio2));
 
-    auto Session1 = Manager1->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
-    auto Session2 = Manager2->CreateSession(std::make_unique<LoraTransferConfig>(0, nullptr));
+    auto Session1 = Manager1->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
+    auto Session2 = Manager2->CreateSession(std::make_unique<LoraTransferConfig>(0, 0, nullptr));
     ASSERT_NE(Session1, nullptr);
     ASSERT_NE(Session2, nullptr);
 
@@ -491,7 +531,7 @@ TEST(LoraTransportTest, CallbackReplacement_UsesLatest)
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
     auto* RadioPtr = Radio.get();
     auto Manager   = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session   = Manager->CreateSession(std::make_unique<LoraTransferConfig>(1, nullptr));
+    auto Session   = Manager->CreateSession(std::make_unique<LoraTransferConfig>(1, 0, nullptr));
     ASSERT_NE(Session, nullptr);
 
     bool firstCalled  = false;
@@ -523,14 +563,14 @@ TEST(LoraTransportTest, ClosedSessionDoesNotReceive)
     auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto S1      = Manager->CreateSession(std::make_unique<LoraTransferConfig>(1, nullptr));
-    auto S2      = Manager->CreateSession(std::make_unique<LoraTransferConfig>(2, nullptr));
+    auto S1      = Manager->CreateSession(std::make_unique<LoraTransferConfig>(1, 0, nullptr));
+    auto S2      = Manager->CreateSession(std::make_unique<LoraTransferConfig>(2, 0, nullptr));
 
     int Called1 = 0;
     int Called2 = 0;
 
-    S1->RegisterCallback([&](const TransferContext&, std::span<const std::byte> payload) { Called1++; });
-    S2->RegisterCallback([&](const TransferContext&, std::span<const std::byte> payload) { Called2++; });
+    S1->RegisterCallback([&](const TransferContext&, std::span<const std::byte>) { Called1++; });
+    S2->RegisterCallback([&](const TransferContext&, std::span<const std::byte>) { Called2++; });
 
     // Close S1 — it should not receive data anymore
     Manager->Close(*S1);

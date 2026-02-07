@@ -18,9 +18,38 @@ namespace ra::turtleford
 {
 bool LoraTransferManager::LoraTransferSession::Send(std::span<const std::byte> Data)
 {
-    if (!IsOpen()) { return false; }
-    auto managerShared = m_Manager.lock();
-    return managerShared->Send(Data);
+    if (!IsOpen()) [[unlikely]] { return false; }
+
+    auto Mgr = m_Manager.lock();
+    return Mgr->Send(m_SessionId, Data);
+}
+
+void LoraTransferManager::LoraTransferSession::RegisterCallback(ITransferSession::ReceiveCallback Cb)
+{
+    if (auto Mgr = m_Manager.lock()) { Mgr->SetCallbackForSession(m_SessionId, std::move(Cb)); }
+}
+
+bool LoraTransferManager::LoraTransferSession::IsOpen()
+{
+    if (auto Mgr = m_Manager.lock()) { return Mgr->IsSessionAlive(m_SessionId); }
+    return false;
+}
+
+size_t LoraTransferManager::LoraTransferSession::ID() const
+{
+    return m_SessionId;
+}
+
+const ITransferConfig& LoraTransferManager::LoraTransferSession::Config() const
+{
+    if (auto Mgr = m_Manager.lock()) [[likely]]
+    {
+        if (auto Ptr = Mgr->GetConfig(m_SessionId)) { return *Ptr; }
+    }
+
+    // we should never hit this case
+    static LoraTransferConfig InvalidConfig {0, 0, nullptr};
+    return InvalidConfig;
 }
 
 std::shared_ptr<ITransferSession> LoraTransferManager::CreateSession(std::unique_ptr<ITransferConfig> Cfg)
@@ -28,22 +57,71 @@ std::shared_ptr<ITransferSession> LoraTransferManager::CreateSession(std::unique
     if (!Cfg.get()) { return nullptr; }
 
     std::unique_ptr<LoraTransferConfig> LoraConfigPtr(static_cast<LoraTransferConfig*>(Cfg.release()));
-    // Create token and session together so session observes the token immediately
-    auto Token     = std::make_shared<LoraTransferSession::SessionToken>();
-    // ctor is private friend, can't use std::make_shared
-    auto* pSession = new LoraTransferSession(weak_from_this(), std::move(LoraConfigPtr), Token, m_NextSessionId++);
+    auto* pSession = new LoraTransferSession(weak_from_this(), m_NextSessionId++);
     if (!pSession) { return nullptr; }
 
     std::shared_ptr<LoraTransferSession> Session {pSession};
-    m_Sessions.push_back({Session, std::move(Token)});
+    // ManagedSession owns the per-session state (config + callback)
+    m_Sessions.push_back({Session, {}, std::move(LoraConfigPtr)});
 
     return Session;
 }
-
 bool LoraTransferManager::Close(const ITransferSession& Session)
 {
     const auto Erased = std::erase_if(m_Sessions, [&](ManagedSession& S) { return S.Session.get() == &Session; });
     return Erased == 1;
+}
+
+void LoraTransferManager::SetCallbackForSession(size_t Id, ITransferSession::ReceiveCallback Cb)
+{
+    for (auto& M : m_Sessions)
+    {
+        if (M.Session->ID() == Id)
+        {
+            M.Callback = std::move(Cb);
+            return;
+        }
+    }
+}
+
+bool LoraTransferManager::IsSessionAlive(size_t Id) const
+{
+    // A session is considered alive if it is currently present in the managed list.
+    for (const auto& M : m_Sessions)
+    {
+        if (M.Session->ID() == Id) { return true; }
+    }
+    return false;
+}
+
+const ITransferConfig* LoraTransferManager::GetConfig(size_t Id) const
+{
+    for (const auto& M : m_Sessions)
+    {
+        if (M.Session->ID() == Id) { return M.Config.get(); }
+    }
+    return nullptr;
+}
+
+bool LoraTransferManager::Send(size_t SessionId, std::span<const std::byte> Data)
+{
+    // the HAL is currently not thread safe, so all send must be synchronized through manager
+    if (Data.size() > LoraMTU) { return false; }
+
+    const auto* pCfg = GetConfig(SessionId);
+    if (!pCfg) [[unlikely]] { return false; }
+
+    const auto& Cfg = static_cast<const LoraTransferConfig&>(*pCfg);
+
+    OutgoingMessage Msg {
+        .DestinationId = Cfg.Addr.SendTo,
+        .SourceId      = Cfg.Addr.SelfId,
+        .Length        = static_cast<decltype(Msg.Length)>(Data.size()),
+        .Data          = {},
+    };
+    std::copy_n(Data.begin(), Msg.Length, Msg.Data.begin());
+
+    return m_OutgoingMessageQueue.Queue(std::move(Msg));
 }
 
 void LoraTransferManager::Process()
@@ -65,8 +143,9 @@ void LoraTransferManager::Process()
     // send
     if (auto OptMsg = m_OutgoingMessageQueue.Peek())
     {
-        const auto& Data = OptMsg->get();
-        if (m_Radio->send(reinterpret_cast<const uint8_t*>(Data.data()), Data.size()))
+        const auto& Msg = OptMsg->get();
+
+        if (m_Radio->send(reinterpret_cast<const uint8_t*>(Msg.Data.data()), Msg.Length))
         {
             m_OutgoingMessageQueue.Dequeue();
         }
@@ -82,17 +161,25 @@ void LoraTransferManager::Process()
             return;
         }
 
-        // broadcast to each session, consider amortizing
+        if (Size < 1) { return; }
+
+        // broadcast to each session
+        // we currently cannot distinguish traffic sources without packet headers,
+        // so we must notify all potentital listeners.
         for (auto& M : m_Sessions)
         {
-            const auto& pSession      = M.Session;
-            const auto& SessionConfig = static_cast<const LoraTransferConfig&>(pSession->Config());
+            if (M.Callback)
+            {
+                // We assume the message comes from the session's configured peer for now
+                // since we lack source identification in the raw packet.
+                const auto Ctx = TransferContext {.SessionID = M.Session->ID(),
+                                                  .Type      = TransportType::Lora,
+                                                  .SourceID  = M.Config->Addr.RecvFrom,
+                                                  .Session   = M.Session};
+                const std::span<const std::byte> Payload = {reinterpret_cast<const std::byte*>(Buff.data()), Size};
 
-            const auto Ctx =
-                TransferContext {.SessionID = 0, .Type = TransportType::Lora, .SourceID = 0, .Session = pSession};
-            const std::span<const std::byte> Payload = {reinterpret_cast<const std::byte*>(Buff.data()), Size};
-
-            pSession->Deliver(Ctx, Payload);
+                M.Callback(Ctx, Payload);
+            }
         }
     }
 }
