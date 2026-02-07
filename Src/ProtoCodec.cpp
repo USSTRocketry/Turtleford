@@ -150,4 +150,28 @@ Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string& Str)
 
     return Message;
 }
+
+Proto_MainMessage PbGen_SwitchFrequencyMsg(float NewFrequency)
+{
+    Proto_SwitchRadioFrequency FQ = {
+        .new_frequency = NewFrequency
+    };
+
+    return Proto_MainMessage {
+        .which_message_type = Proto_MainMessage_switch_radio_frequency_tag,
+        .message_type = {.switch_radio_frequency = FQ}
+    };
+}
+
+Proto_MainMessage PbGen_AckMsg(int ack_to){
+        Proto_Ack AM = {
+        .response_to_which_message = ack_to
+    };
+
+    return Proto_MainMessage {
+        .which_message_type = Proto_MainMessage_ack_tag,
+        .message_type = {.ack = AM}
+    };
+}
+
 } // namespace ra::turtleford
