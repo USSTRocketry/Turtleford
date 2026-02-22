@@ -35,10 +35,7 @@ bool LoraTransferManager::LoraTransferSession::IsOpen()
     return false;
 }
 
-size_t LoraTransferManager::LoraTransferSession::ID() const
-{
-    return m_SessionId;
-}
+size_t LoraTransferManager::LoraTransferSession::ID() const { return m_SessionId; }
 
 const ITransferConfig& LoraTransferManager::LoraTransferSession::Config() const
 {
@@ -172,10 +169,10 @@ void LoraTransferManager::Process()
             {
                 // We assume the message comes from the session's configured peer for now
                 // since we lack source identification in the raw packet.
-                const auto Ctx = TransferContext {.SessionID = M.Session->ID(),
-                                                  .Type      = TransportType::Lora,
-                                                  .SourceID  = M.Config->Addr.RecvFrom,
-                                                  .Session   = M.Session};
+                const auto Ctx                           = TransferContext {.SessionID = M.Session->ID(),
+                                                                            .Type      = TransportType::Lora,
+                                                                            .SourceID  = M.Config->Addr.RecvFrom,
+                                                                            .Session   = M.Session};
                 const std::span<const std::byte> Payload = {reinterpret_cast<const std::byte*>(Buff.data()), Size};
 
                 M.Callback(Ctx, Payload);

@@ -10,6 +10,7 @@
 #include "Avionics_HAL.h"
 #include "CachedBuffer.h"
 #include "ProtoCodec.h"
+#include "Type.h"
 
 namespace ra
 {
@@ -17,11 +18,11 @@ class Logger
 {
     constexpr static auto BufferSize = 512;
     using BufferType                 = bricks::CachedBuffer<BufferSize>;
-    using SeverityType               = uint_fast16_t;
+    using EnumType                   = uint_fast16_t;
 
 public:
     // Do not forget to update the severity map
-    enum class Severity : SeverityType
+    enum class Severity : EnumType
     {
         Verbose = 0,
         Info,
@@ -29,12 +30,16 @@ public:
         Error
     };
 
+    enum class Module : EnumType
+    {
+        Turtleford
+    };
+
     struct LogInfo
     {
         uint32_t Timestamp;
         Severity Level;
-        uint32_t Status;
-        const std::string& Msg;
+        Module Location;
     };
 
     using StorageWriter = BufferType::StoreCallback;
@@ -46,12 +51,24 @@ public:
         return Logger;
     }
 
-    bool Log(const LogInfo& Info)
+    // TODO : Separate package logic (to proto) from storing logic (writing to storage)
+    bool Log(const LogInfo& Info, const ra::turtleford::type::FlightData& Data)
     {
-        const auto DebugMsg = turtleford::PbGen_DebugMsg(Info.Status, Info.Msg);
-        const auto Data     = turtleford::ProtoEncode(Info.Timestamp, static_cast<uint32_t>(Info.Level), DebugMsg);
+        // package incoming flight data for protobuf encoding
+        const auto FlightData = turtleford::PbGen_FlightData(Data);
+        const auto Encoded    = turtleford::ProtoEncode(
+            Info.Timestamp, static_cast<uint32_t>(Info.Level), static_cast<uint32_t>(Info.Location), FlightData);
 
-        return Log(std::span {Data.data(), Data.size()});
+        return Log(std::span {Encoded.data(), Encoded.size()});
+    }
+
+    bool Log(const LogInfo& Info, const std::string& Msg)
+    {
+        const auto DebugMsg = turtleford::PbGen_DebugMsg(static_cast<uint32_t>(Info.Location), Msg);
+        const auto Encoded  = turtleford::ProtoEncode(
+            Info.Timestamp, static_cast<uint32_t>(Info.Level), static_cast<uint32_t>(Info.Location), DebugMsg);
+
+        return Log(std::span {Encoded.data(), Encoded.size()});
     }
 
     // Serialized data ONLY
