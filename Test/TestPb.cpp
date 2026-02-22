@@ -12,7 +12,7 @@ TEST(ProtoEncodeTest, ProtoEncodeSingle)
     std::string test_str    = RNG.String(RNG.Value<uint8_t>());
 
     // Encode the message
-    const auto data          = ra::turtleford::PbGen_DebugMsg(severity, &test_str);
+    const auto data          = ra::turtleford::PbGen_DebugMsg(severity, test_str);
     const auto bytes_written = ra::turtleford::ProtoEncode(data).size();
 
     // Check if the function wrote some bytes (non-zero result).
@@ -23,7 +23,7 @@ TEST(ProtoEncodeTest, ProtoEncodeSingleBufferSmall)
     const auto status    = RNG.Value<uint32_t>();
     std::string test_str = RNG.String(RNG.Value<uint8_t>());
 
-    const auto data            = ra::turtleford::PbGen_DebugMsg(status, &test_str);
+    const auto data            = ra::turtleford::PbGen_DebugMsg(status, test_str);
     const auto required_length = ra::turtleford::ProtoEncode(data, {});
 
     std::array<std::byte, 1> buffer;
@@ -42,7 +42,7 @@ TEST(ProtoEncodeTest, ProtoEncodeLogMessage)
     const uint32_t severity  = RNG.Value<uint32_t>();
     std::string test_str     = RNG.String(RNG.Value<uint8_t>());
 
-    const auto data          = ra::turtleford::PbGen_DebugMsg(status, &test_str);
+    const auto data          = ra::turtleford::PbGen_DebugMsg(status, test_str);
     const auto bytes_written = ra::turtleford::ProtoEncode(timestamp, severity, data).size();
 
     ASSERT_GT(bytes_written, 0);
@@ -52,7 +52,7 @@ TEST(ProtoDecodeTest, ProtoDecodeMainMessage)
 {
     const std::string test_str = RNG.String(RNG.Value<uint8_t>());
     const auto status          = RNG.Value<uint32_t>();
-    const auto data            = ra::turtleford::PbGen_DebugMsg(status, &test_str);
+    const auto data            = ra::turtleford::PbGen_DebugMsg(status, test_str);
 
     const auto encoded_data = ra::turtleford::ProtoEncode(data);
 
@@ -76,7 +76,7 @@ TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
     const uint32_t timestamp = RNG.Value<uint32_t>();
     const uint32_t severity  = RNG.Value<uint32_t>();
 
-    const auto data         = ra::turtleford::PbGen_DebugMsg(status, &test_str);
+    const auto data         = ra::turtleford::PbGen_DebugMsg(status, test_str);
     const auto encoded_data = ra::turtleford::ProtoEncode(timestamp, severity, data);
 
     // Decode the LogMessage

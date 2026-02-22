@@ -5,7 +5,7 @@
 // #include <format>
 #include <span>
 #include <vector>
-#include <string_view>
+#include <string>
 
 #include "Avionics_HAL.h"
 #include "CachedBuffer.h"
@@ -29,6 +29,14 @@ public:
         Error
     };
 
+    struct LogInfo
+    {
+        uint32_t Timestamp;
+        Severity Level;
+        uint32_t Status;
+        const std::string& Msg;
+    };
+
     using StorageWriter = BufferType::StoreCallback;
 
 public:
@@ -38,25 +46,22 @@ public:
         return Logger;
     }
 
-    bool Log(uint32_t Timestamp, Severity Level, std::string_view Str)
+    bool Log(const LogInfo& Info)
     {
-        const auto EncodedStr = turtleford::PbGen_DebugMsg(0, Str);
-        const auto EncodeSize = turtleford::ProtoEncode(Timestamp, static_cast<SeverityType>(Level), &EncodedStr, {});
+        const auto DebugMsg = turtleford::PbGen_DebugMsg(Info.Status, Info.Msg);
+        const auto Data     = turtleford::ProtoEncode(Info.Timestamp, static_cast<uint32_t>(Info.Level), DebugMsg);
 
-        std::vector<std::byte> Data {EncodeSize};
-        turtleford::ProtoEncode(Timestamp, static_cast<SeverityType>(Level), EncodedStr, Data);
-
-        return Log({Data.data(), Data.data() + EncodeSize});
+        return Log(std::span {Data.data(), Data.size()});
     }
 
     // Serialized data ONLY
-    bool Log(std::span<std::byte> Data)
+    bool Log(std::span<const std::byte> Data)
     {
         if (Data.size_bytes() > 0) { return m_Buffer.Store(Data); }
         return false;
     }
 
-    void RegisterCallback(StorageWriter Cb) { m_Buffer.RegisterCallback(Cb); }
+    void RegisterCallback(StorageWriter Cb, void* Ctx) { m_Buffer.RegisterCallback(Cb, Ctx); }
 
 private:
     Logger() {}

@@ -1,6 +1,5 @@
 #include "ProtoCodec.h"
 #include "FlightComputerGroundStationCommunication/RocketGroundCommunication.pb.h"
-#include <string>
 #include <memory>
 
 // Utils / callbacks
@@ -128,7 +127,7 @@ Proto_MainMessage PbGen_FlightData(const type::FlightData& Data)
     };
 }
 
-Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string* Str)
+Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string& Str)
 {
     Proto_MainMessage Message {};
     Message.which_message_type = Proto_MainMessage_debug_msg_tag;
@@ -136,12 +135,12 @@ Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string* Str)
     auto& MsgStr  = Message.message_type.debug_msg;
     MsgStr.status = Status;
 
-    MsgStr.msg.arg          = const_cast<std::string*>(Str);
+MsgStr.msg.arg          = &const_cast<std::string&>(Str);
     MsgStr.msg.funcs.encode = [](pb_ostream_t* Stream, const pb_field_t* Fields, void* const* Arg) -> bool
     {
         const auto& S = *static_cast<const std::string*>(*Arg);
         return pb_encode_tag_for_field(Stream, Fields) &&
-               pb_encode_string(Stream, reinterpret_cast<const uint8_t*>(S.c_str()), S.size());
+               pb_encode_string(Stream, reinterpret_cast<const uint8_t*>(S.data()), S.size());
     };
 
     return Message;
