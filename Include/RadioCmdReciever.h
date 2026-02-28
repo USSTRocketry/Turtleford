@@ -22,9 +22,11 @@ public:
     void SendCmnd(Proto_MainMessage msg);
 
     void ProcessWorkQueue();
+    
+    void RecieveCommand(const TransferContext& Context, std::span<const std::byte> Data);
 
 private:
-    void RecieveCommand(const TransferContext& Context, std::span<const std::byte> Data);
+    static void RecieveCommandPassthrough(RadioCmndReciever& reciever, const TransferContext& Context, std::span<const std::byte> Data);
 
     void ManualTimeoutCancelSwitchFrequency(std::chrono::_V2::steady_clock::time_point timeout_time);
 
@@ -42,7 +44,7 @@ private:
         WAITING_FOR_ACK_ON_NEW_FREQUENCY
     };
 
-    RadState state = READY;
+    RadState state = RadState::READY;
 };
 
 } // namespace ra::turtleford

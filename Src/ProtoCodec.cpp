@@ -163,7 +163,7 @@ Proto_MainMessage PbGen_SwitchFrequencyMsg(float NewFrequency)
     };
 }
 
-Proto_MainMessage PbGen_AckMsg(int ack_to){
+Proto_MainMessage PbGen_AckMsg(uint32_t ack_to){
         Proto_Ack AM = {
         .response_to_which_message = ack_to
     };

@@ -3,15 +3,18 @@
 #include <chrono>
 #include "RadioCmdReciever.h"
 #include "ProtoCodec.h"
+#include "WorkQueue.h"
 
 namespace ra::turtleford
 {
 
+// A timeout that once the timer expires, switches radio state to ready and cancels the frequency switch
 void RadioCmndReciever::ManualTimeoutCancelSwitchFrequency(std::chrono::_V2::steady_clock::time_point timeout_time){
     if(std::chrono::steady_clock::now() >= timeout_time){
         state = RadState::READY;
     }
     else{
+
         //re-add this function to the work queue
     }
 
@@ -38,6 +41,15 @@ void RadioCmndReciever::ThreadRun(Proto_MainMessage Msg)
             break;
     }
 }
+
+// A free function that matches the C API signature and acts as a wrapper
+void RecieveCommandWrapper(void* userData) {
+    // Cast the void* back to the correct type and call the member function
+    RadioCmndReciever* instance = static_cast<RadioCmndReciever*>(userData);
+    //instance->RecieveCommand();
+}
+
+// recieves a command from the radio and decodes it using the message type to determine what it will do
 void RadioCmndReciever::RecieveCommand(const TransferContext& Context, std::span<const std::byte> Data)
 {
     const auto Msg = ProtoDecode_MainMessage(Data);
@@ -81,7 +93,7 @@ void RadioCmndReciever::RecieveCommand(const TransferContext& Context, std::span
 }
 
 RadioCmndReciever::RadioCmndReciever() :
-    session(TransferManager.CreateSession(std::make_unique<LoraTransferConfig>(2, 3, RecieveCommand)))
+    session(TransferManager.CreateSession(std::make_unique<LoraTransferConfig>(2, 3, reinterpret_cast<void*>(RecieveCommandWrapper))))
 {
 }
 
@@ -92,7 +104,7 @@ void RadioCmndReciever::SendCmnd(Proto_MainMessage msg)
     if(msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag){
         state = RadState::WAITING_FOR_ACK;
     }
-    TransferManager.Send(encoded);
+    session->Send(encoded);
 }
 
 } // namespace ra::turtleford

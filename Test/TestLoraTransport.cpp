@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "Transport/LoraTransport.h"
-#include "abstractions/ITelemetryRadio.h"
+//#include "abstractions/ITelemetryRadio.h"
 #include <memory>
 #include <vector>
 
@@ -23,7 +23,7 @@ public:
     MOCK_METHOD(void, setAddress, (const uint8_t), (override));
     MOCK_METHOD(void, setDestinationAddress, (const uint8_t), (override));
     MOCK_METHOD(void, setPromiscuousMode, (bool), (override));
-    MOCK_METHOD(void*, native_handle, (), (override));
+    // MOCK_METHOD(void*, native_handle, (), (override));
 };
 
 TEST(LoraTransportTest, CreateSessionAndLifecycle)
