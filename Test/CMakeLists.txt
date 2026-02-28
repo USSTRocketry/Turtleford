@@ -12,10 +12,7 @@ FetchContent_MakeAvailable(googletest)
 
 # ------------------- Add your test executable -------------------
 set(TEST_RUNNER TestRunner)
-add_executable(${TEST_RUNNER}
-TestRunner.cpp
-TestPb.cpp
-)
+add_executable(${TEST_RUNNER})
 
 # ---------- Compiler-specific Configuration ----------
 target_compile_features(${TEST_RUNNER} PRIVATE cxx_std_20)
@@ -33,3 +30,11 @@ target_link_libraries(${TEST_RUNNER} PRIVATE gtest gtest_main gmock gmock_main $
 # Register tests with CTest
 include(GoogleTest)
 gtest_discover_tests(${TEST_RUNNER})
+
+# ---------- Test Source files ----------
+target_sources(${TEST_RUNNER} PRIVATE
+  TestRunner.cpp
+  TestPb.cpp
+  TestLoraTransport.cpp
+  TestLog.cpp
+)
