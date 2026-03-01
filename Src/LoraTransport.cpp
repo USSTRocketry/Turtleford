@@ -45,7 +45,7 @@ const ITransferConfig& LoraTransferManager::LoraTransferSession::Config() const
     }
 
     // we should never hit this case
-    static LoraTransferConfig InvalidConfig {0, 0, nullptr};
+    static LoraTransferConfig InvalidConfig {0, 0};
     return InvalidConfig;
 }
 

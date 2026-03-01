@@ -31,9 +31,6 @@ struct LoraTransferConfig final : public ITransferConfig
         uint8_t SendTo;
     } Addr {};
 
-    /** @brief User-defined context pointer. Not managed by the transport. */
-    void* Ctx = nullptr;
-
 public:
     /**
      * @brief Creates a copy of this configuration.
@@ -42,8 +39,8 @@ public:
     std::unique_ptr<ITransferConfig> Clone() const override { return std::make_unique<LoraTransferConfig>(*this); }
 
 public:
-    LoraTransferConfig(uint8_t Peer, uint8_t Local, void* Context) :
-        Addr {.SelfId = Local, .RecvFrom = Peer, .SendTo = Peer}, Ctx(Context)
+    LoraTransferConfig(uint8_t Peer, uint8_t Local) :
+        Addr {.SelfId = Local, .RecvFrom = Peer, .SendTo = Peer}
     {
     }
     LoraTransferConfig(const LoraTransferConfig&)            = default;
