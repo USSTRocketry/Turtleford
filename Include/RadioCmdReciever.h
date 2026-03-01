@@ -9,7 +9,7 @@ namespace ra::turtleford
 class RadioCmndReciever
 {
 public:
-    RadioCmndReciever();
+    RadioCmndReciever(std::shared_ptr<ra::turtleford::ITransferSession> session_in);
 
     void (*RecieveData)(Proto_InFlightData) = nullptr;
 
@@ -29,8 +29,6 @@ private:
     static void RecieveCommandPassthrough(RadioCmndReciever& reciever, const TransferContext& Context, std::span<const std::byte> Data);
 
     void ManualTimeoutCancelSwitchFrequency(std::chrono::_V2::steady_clock::time_point timeout_time);
-
-    LoraTransferManager TransferManager {nullptr};
 
     std::shared_ptr<ITransferSession> session;
 

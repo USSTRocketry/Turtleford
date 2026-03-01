@@ -92,9 +92,14 @@ void RadioCmndReciever::RecieveCommand(const TransferContext& Context, std::span
 
 }
 
-RadioCmndReciever::RadioCmndReciever() :
-    session(TransferManager.CreateSession(std::make_unique<LoraTransferConfig>(2, 3, reinterpret_cast<void*>(RecieveCommandWrapper))))
+
+
+RadioCmndReciever::RadioCmndReciever(std::shared_ptr<ra::turtleford::ITransferSession> session_in)
 {
+    session = session_in;
+    //insane c++ magic (lambda func)
+    session->RegisterCallback([&](auto ...arg){RecieveCommand(arg...);});
+    
 }
 
 // send over the radio
