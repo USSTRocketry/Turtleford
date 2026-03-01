@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library-json.json",
+  "name": "Turtleford",
+  "version": "0.1.0",
+  "description": "Avionics connectivity library implementing higher-level communication protocols over LoRa with protobuf encoding",
+  "keywords": [
+    "avionics",
+    "lora",
+    "transport",
+    "protobuf",
+    "communication"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UofS-Rocketry/Turtleford.git"
+  },
+  "build": {
+    "srcDir": "Src",
+    "includeDir": "Include",
+    "flags": [
+      "-std=c++20"
+    ]
+  },
+  "dependencies": [
+    {
+      "owner": "nanopb",
+      "name": "Nanopb",
+      "version": "^0.4.9"
+    },
+    {
+      "name": "HAL",
+      "version": "https://github.com/USSTRocketry/HAL.git"
+    },
+    {
+      "name": "Bricks",
+      "version": "https://github.com/USSTRocketry/Bricks.git"
+    },
+    {
+      "name": "Tisdale-proto-files",
+      "version": "https://github.com/USSTRocketry/Tisdale-proto-files.git"
+    }
+  ],
+  "export": {
+    "include": [
+      "Include/*",
+      "Src/*",
+      "library.json"
+    ],
+    "exclude": [
+      "Test/*",
+      "build/*",
+      "build.py",
+      ".git"
+    ]
+  }
+}
