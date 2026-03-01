@@ -8,7 +8,7 @@
 #include <string>
 
 #include "Avionics_HAL.h"
-#include "CachedBuffer.h"
+#include "DataStructure/Buffer/CachedBuffer.h"
 #include "ProtoCodec.h"
 #include "Type.h"
 

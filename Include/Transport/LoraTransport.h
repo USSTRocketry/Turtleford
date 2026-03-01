@@ -9,7 +9,7 @@
 #include <limits>
 
 #include "TransferSession.h"
-#include "CircularBuffer.h"
+#include "DataStructure/Buffer/CircularBuffer.h"
 #include "Avionics_HAL.h"
 
 namespace ra::turtleford
@@ -39,10 +39,7 @@ public:
     std::unique_ptr<ITransferConfig> Clone() const override { return std::make_unique<LoraTransferConfig>(*this); }
 
 public:
-    LoraTransferConfig(uint8_t Peer, uint8_t Local) :
-        Addr {.SelfId = Local, .RecvFrom = Peer, .SendTo = Peer}
-    {
-    }
+    LoraTransferConfig(uint8_t Peer, uint8_t Local) : Addr {.SelfId = Local, .RecvFrom = Peer, .SendTo = Peer} {}
     LoraTransferConfig(const LoraTransferConfig&)            = default;
     LoraTransferConfig& operator=(const LoraTransferConfig&) = default;
 };

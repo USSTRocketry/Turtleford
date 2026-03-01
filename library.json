@@ -6,7 +6,6 @@
   "keywords": [
     "avionics",
     "lora",
-    "transport",
     "protobuf",
     "communication"
   ],
@@ -18,14 +17,15 @@
     "srcDir": "Src",
     "includeDir": "Include",
     "flags": [
-      "-std=c++20"
+      "-std=gnu++20",
+      "-D PB_BUFFER_ONLY"
     ]
   },
   "dependencies": [
     {
       "owner": "nanopb",
       "name": "Nanopb",
-      "version": "^0.4.9"
+      "version": "https://github.com/nanopb/nanopb.git#7e19a0db72"
     },
     {
       "name": "HAL",
