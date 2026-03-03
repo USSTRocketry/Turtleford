@@ -22,9 +22,9 @@ namespace ra::turtleford
  * @return : Number of bytes written or required.
  */
 std::vector<std::byte> ProtoEncode(const Proto_MainMessage&);
-uint32_t ProtoEncode(const Proto_MainMessage&, std::span<std::byte> Buffer);
+size_t ProtoEncode(const Proto_MainMessage&, std::span<std::byte> Buffer);
 // Log message
-uint32_t ProtoEncode(
+size_t ProtoEncode(
     uint32_t TimeStamp, uint32_t Severity, uint32_t Location, const Proto_MainMessage&, std::span<std::byte> Buffer);
 std::vector<std::byte> ProtoEncode(uint32_t TimeStamp, uint32_t Severity, uint32_t Location, const Proto_MainMessage&);
 

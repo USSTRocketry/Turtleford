@@ -28,7 +28,7 @@ TEST(ProtoEncodeTest, ProtoEncodeSingleBufferSmall)
 
     std::array<std::byte, 1> Buffer;
     // Encode the message
-    const uint32_t BytesWritten = ra::turtleford::ProtoEncode(Data, Buffer);
+    const auto BytesWritten = ra::turtleford::ProtoEncode(Data, Buffer);
 
     // Check if the function wrote the exact bytes
     ASSERT_GT(RequiredLength, 0);

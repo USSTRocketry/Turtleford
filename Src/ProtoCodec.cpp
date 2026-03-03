@@ -13,7 +13,7 @@ namespace
  * @return : Number of bytes written or required. Returns 0 on encoding failure.
  */
 template <typename T>
-uint32_t PbEncode_Internal(const T& Msg, std::span<std::byte> Buffer)
+size_t PbEncode_Internal(const T& Msg, std::span<std::byte> Buffer)
 {
     pb_ostream_t Stream = Buffer.empty()
                               ? pb_ostream_t(PB_OSTREAM_SIZING)
@@ -56,15 +56,15 @@ bool PbDecode_Proto_MainMessage(pb_istream_t* Stream, const pb_field_t* Field, v
 
 namespace ra::turtleford
 {
-uint32_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer)
+size_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer)
 {
     return PbEncode_Internal(Message, Buffer);
 }
-uint32_t ProtoEncode(uint32_t TimeStamp,
-                     uint32_t Severity,
-                     uint32_t Location,
-                     const Proto_MainMessage& Message,
-                     std::span<std::byte> Buffer)
+size_t ProtoEncode(uint32_t TimeStamp,
+                   uint32_t Severity,
+                   uint32_t Location,
+                   const Proto_MainMessage& Message,
+                   std::span<std::byte> Buffer)
 {
     const Proto_LogMessage Msg {
         .time_stamp = TimeStamp, .severity = Severity, .location = Location, .main_message = Message};

@@ -82,8 +82,8 @@ private:
         }
 
     private:
-        size_t m_SessionId {};
         std::weak_ptr<LoraTransferManager> m_Manager;
+        size_t m_SessionId {};
 
         friend class LoraTransferManager;
     };
