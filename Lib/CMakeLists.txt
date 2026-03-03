@@ -7,7 +7,7 @@ string(REPLACE ";" " " NANOPB_OPTIONS "${NANOPB_OPTIONS}")
 
 nanopb_generate_cpp(TARGET proto RELPATH Tisdale-proto-files
   Tisdale-proto-files/ProtoMain.proto
-  Tisdale-proto-files/FlightComputerGroundStationCommunication/RocketGroundCommunication.proto
+  Tisdale-proto-files/RocketGroundCommunication.proto
 )
 target_compile_definitions(proto
  PRIVATE

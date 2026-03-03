@@ -1,5 +1,5 @@
 #include "ProtoCodec.h"
-#include "FlightComputerGroundStationCommunication/RocketGroundCommunication.pb.h"
+#include "RocketGroundCommunication.pb.h"
 #include <memory>
 
 // Utils / callbacks

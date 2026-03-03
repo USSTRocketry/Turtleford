@@ -142,7 +142,7 @@ void LoraTransferManager::Process()
     {
         const auto& Msg = OptMsg->get();
 
-        if (m_Radio->send(reinterpret_cast<const uint8_t*>(Msg.Data.data()), Msg.Length))
+        if (m_Radio->send({reinterpret_cast<const uint8_t*>(Msg.Data.data()), Msg.Length}))
         {
             m_OutgoingMessageQueue.Dequeue();
         }
@@ -152,7 +152,7 @@ void LoraTransferManager::Process()
     {
         size_t Size      = 0;
         static auto Buff = std::array<uint8_t, 1024>();
-        if (!m_Radio->receive(Buff.data(), Buff.max_size(), Size))
+        if (!m_Radio->receive(std::span {Buff}, Size))
         {
             // TODO : Log
             return;

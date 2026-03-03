@@ -10,13 +10,13 @@ using ::testing::_;
 using ::testing::NiceMock;
 using ::testing::Return;
 
-class MockRadio : public ITelemetryRadio
+class MockRadio : public HAL::ITelemetryRadio
 {
 public:
     MOCK_METHOD(bool, begin, (), (override));
     MOCK_METHOD(void, reset, (uint8_t), (override));
-    MOCK_METHOD(bool, send, (const uint8_t*, size_t), (override));
-    MOCK_METHOD(bool, receive, (uint8_t*, size_t, size_t&), (override));
+    MOCK_METHOD(bool, send, (std::span<const uint8_t>), (override));
+    MOCK_METHOD(bool, receive, (std::span<uint8_t>, size_t&), (override));
     MOCK_METHOD(void, setFrequency, (float), (override));
     MOCK_METHOD(void, setTxPower, (uint8_t), (override));
     MOCK_METHOD(void, configureLoRa, (uint8_t, uint16_t, uint8_t), (override));
@@ -52,7 +52,7 @@ TEST(LoraTransportTest, SendData)
 
     std::vector<std::byte> Data = {std::byte {0x01}, std::byte {0x02}, std::byte {0x03}};
 
-    EXPECT_CALL(*RadioPtr, send(_, _)).Times(1).WillOnce(Return(true));
+    EXPECT_CALL(*RadioPtr, send(_)).Times(1).WillOnce(Return(true));
 
     EXPECT_TRUE(Session->Send(Data));
 
@@ -80,10 +80,10 @@ TEST(LoraTransportTest, Send_MultipleSessions_SetsAddressesCorrectly)
         testing::InSequence seq;
 
         // Expect Session 1 send
-        EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(true));
+        EXPECT_CALL(*RadioPtr, send(_)).WillOnce(Return(true));
 
         // Expect Session 2 send
-        EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(true));
+        EXPECT_CALL(*RadioPtr, send(_)).WillOnce(Return(true));
     }
 
     Manager->Process(); // Sends first message
@@ -145,7 +145,7 @@ TEST(LoraTransportTest, Send_RetriesUntilSuccess)
     std::vector<std::byte> Data = {std::byte {0x10}};
 
     // First send fails
-    EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(false));
+EXPECT_CALL(*RadioPtr, send(_)).WillOnce(Return(false));
 
     EXPECT_TRUE(Session->Send(Data));
 
@@ -153,7 +153,7 @@ TEST(LoraTransportTest, Send_RetriesUntilSuccess)
     Manager->Process();
 
     // Second Process -> send returns true (message dequeued)
-    EXPECT_CALL(*RadioPtr, send(_, _)).WillOnce(Return(true));
+    EXPECT_CALL(*RadioPtr, send(_)).WillOnce(Return(true));
 
     Manager->Process();
 }
@@ -169,7 +169,7 @@ TEST(LoraTransportTest, Send_EmptyData_AllowsEmptyPayload)
     std::vector<std::byte> Data = {};
 
     // Behavior: sending an empty payload is allowed and should result in at most one send invocation
-    EXPECT_CALL(*RadioPtr, send(_, _)).Times(1).WillOnce(Return(true));
+    EXPECT_CALL(*RadioPtr, send(_)).Times(1).WillOnce(Return(true));
 
     EXPECT_TRUE(Session->Send(Data));
     Manager->Process();
@@ -203,14 +203,14 @@ TEST(LoraTransportTest, Receive_DispatchesToCorrectSession)
             EXPECT_EQ(payload.size(), 2);
         });
 
-    EXPECT_CALL(*RadioPtr, receive(_, _, _))
+    EXPECT_CALL(*RadioPtr, receive(_, _))
         .WillOnce(
-            [](uint8_t* buffer, size_t maxLen, size_t& outLen)
+            [](std::span<uint8_t> buffer, size_t& receivedLength)
             {
-                if (maxLen < 2) { return false; }
+                if (buffer.size() < 2) { return false; }
                 buffer[0] = 0xAA; // Raw Payload
                 buffer[1] = 0xBB;
-                outLen    = 2;
+                receivedLength = 2;
                 return true;
             })
         .WillRepeatedly(Return(false));
@@ -264,14 +264,14 @@ TEST(LoraTransportTest, ReceiveData)
             EXPECT_EQ(payload[1], std::byte {0xBB});
         });
 
-    EXPECT_CALL(*RadioPtr, receive(_, _, _))
+    EXPECT_CALL(*RadioPtr, receive(_, _))
         .WillOnce(
-            [](uint8_t* buffer, size_t maxLen, size_t& outLen)
+            [](std::span<uint8_t> buffer, size_t& receivedLength)
             {
-                if (maxLen < 2) { return false; }
+                if (buffer.size() < 2) { return false; }
                 buffer[0] = 0xAA; // Raw Data
                 buffer[1] = 0xBB;
-                outLen    = 2;
+                receivedLength = 2;
                 return true;
             })
         .WillRepeatedly(Return(false));
@@ -345,7 +345,7 @@ TEST(LoraTransportTest, SessionScopedButManagerLives_CanRetrieveAndSend)
         EXPECT_TRUE(Session->Send(Data));
 
         // ensure queued message is processed while manager is still alive
-        EXPECT_CALL(*RadioPtr, send(_, _)).Times(1).WillOnce(Return(true));
+        EXPECT_CALL(*RadioPtr, send(_)).Times(1).WillOnce(Return(true));
         Manager->Process();
     }
 
@@ -356,7 +356,7 @@ TEST(LoraTransportTest, SessionScopedButManagerLives_CanRetrieveAndSend)
 
     std::vector<std::byte> Data2 = {std::byte {0x02}};
     EXPECT_TRUE(Found->Send(Data2));
-    EXPECT_CALL(*RadioPtr, send(_, _)).Times(1).WillOnce(Return(true));
+    EXPECT_CALL(*RadioPtr, send(_)).Times(1).WillOnce(Return(true));
     Manager->Process();
 }
 
@@ -431,7 +431,7 @@ TEST(LoraTransportTest, SendFailsAfterCloseAndNoRadioActivity)
     EXPECT_FALSE(Session->Send(Data));
 
     // No radio activity should happen when processing with no active sessions
-    EXPECT_CALL(*RadioPtr, send(_, _)).Times(0);
+    EXPECT_CALL(*RadioPtr, send(_)).Times(0);
     Manager->Process();
 }
 
@@ -467,13 +467,13 @@ TEST(LoraTransportTest, CallbackContextContainsSessionAndType)
             EXPECT_EQ(Ctx.Session->ID(), Session->ID());
         });
 
-    EXPECT_CALL(*RadioPtr, receive(_, _, _))
+    EXPECT_CALL(*RadioPtr, receive(_, _))
         .WillOnce(
-            [](uint8_t* buffer, size_t maxLen, size_t& outLen)
+            [](std::span<uint8_t> buffer, size_t& receivedLength)
             {
-                if (maxLen < 1) { return false; }
+                if (buffer.size() < 1) { return false; }
                 buffer[0] = 0x05;
-                outLen    = 1;
+                receivedLength = 1;
                 return true;
             })
         .WillRepeatedly(Return(false));
@@ -494,7 +494,7 @@ TEST(LoraTransportTest, ManagerSendDirectlyQueuesAndSends)
     std::vector<std::byte> Data = {std::byte {0x01}};
     EXPECT_TRUE(Session->Send(Data));
 
-    EXPECT_CALL(*RadioPtr, send(_, _)).Times(1).WillOnce(Return(true));
+    EXPECT_CALL(*RadioPtr, send(_)).Times(1).WillOnce(Return(true));
     Manager->Process();
 }
 
@@ -517,8 +517,8 @@ TEST(LoraTransportTest, MultipleManagers_IsolatedRadios)
     EXPECT_TRUE(Session1->Send(Data));
     EXPECT_TRUE(Session2->Send(Data));
 
-    EXPECT_CALL(*R1, send(_, _)).Times(1).WillOnce(Return(true));
-    EXPECT_CALL(*R2, send(_, _)).Times(1).WillOnce(Return(true));
+    EXPECT_CALL(*R1, send(_)).Times(1).WillOnce(Return(true));
+    EXPECT_CALL(*R2, send(_)).Times(1).WillOnce(Return(true));
 
     Manager1->Process();
     Manager2->Process();
@@ -538,13 +538,13 @@ TEST(LoraTransportTest, CallbackReplacement_UsesLatest)
     Session->RegisterCallback([&](const TransferContext&, std::span<const std::byte>) { firstCalled = true; });
     Session->RegisterCallback([&](const TransferContext&, std::span<const std::byte>) { secondCalled = true; });
 
-    EXPECT_CALL(*RadioPtr, receive(_, _, _))
+    EXPECT_CALL(*RadioPtr, receive(_, _))
         .WillOnce(
-            [](uint8_t* buffer, size_t maxLen, size_t& outLen)
+            [](std::span<uint8_t> buffer, size_t& receivedLength)
             {
-                if (maxLen < 1) { return false; }
+                if (buffer.size() < 1) { return false; }
                 buffer[0] = 0x09;
-                outLen    = 1;
+                receivedLength = 1;
                 return true;
             })
         .WillRepeatedly(Return(false));
@@ -573,13 +573,13 @@ TEST(LoraTransportTest, ClosedSessionDoesNotReceive)
     // Close S1 — it should not receive data anymore
     Manager->Close(*S1);
 
-    EXPECT_CALL(*RadioPtr, receive(_, _, _))
+    EXPECT_CALL(*RadioPtr, receive(_, _))
         .WillOnce(
-            [](uint8_t* buffer, size_t maxLen, size_t& outLen)
+            [](std::span<uint8_t> buffer, size_t& receivedLength)
             {
-                if (maxLen < 1) { return false; }
+                if (buffer.size() < 1) { return false; }
                 buffer[0] = 0x7F;
-                outLen    = 1;
+                receivedLength = 1;
                 return true;
             })
         .WillRepeatedly(Return(false));

@@ -149,7 +149,7 @@ public:
      *
      * The manager takes ownership of the radio interface.
      */
-    LoraTransferManager(std::unique_ptr<ITelemetryRadio> Radio) : m_Radio(std::move(Radio)) {}
+    LoraTransferManager(std::unique_ptr<HAL::ITelemetryRadio> Radio) : m_Radio(std::move(Radio)) {}
 
 private:
     static constexpr auto LoraMTU = 512;
@@ -184,7 +184,7 @@ private:
     std::vector<ManagedSession> m_Sessions {}; // Active sessions
     ra::bricks::CircularBuffer<OutgoingMessage> m_OutgoingMessageQueue {};
 
-    std::unique_ptr<ITelemetryRadio> m_Radio;
+    std::unique_ptr<HAL::ITelemetryRadio> m_Radio;
     // Next session id to assign (monotonic)
     size_t m_NextSessionId {1};
 };
