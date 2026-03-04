@@ -26,6 +26,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE Bricks)
 
 # Hardcode HAL platform for this repo
 set(USST_PLATFORM "MOCK" CACHE STRING "Hard coding HAL")
+set(WORK_QUEUE_PREEMPTIVE TRUE CACHE BOOL "Preemptive workqueue")
 add_subdirectory(HAL)
 target_link_libraries(${PROJECT_NAME} PRIVATE HAL)
 
