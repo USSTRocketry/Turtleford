@@ -35,4 +35,8 @@ std::optional<Proto_LogMessage> ProtoDecode_LogMessage(std::span<const std::byte
 Proto_MainMessage PbGen_FlightData(const type::FlightData& Data);
 // WARNING : Underlying Str must live until after Encode
 Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string& Str);
+
+Proto_MainMessage PbGen_SwitchFrequencyMsg(float NewFrequency);
+
+Proto_MainMessage PbGen_AckMsg(int ack_to);
 } // namespace ra::turtleford
