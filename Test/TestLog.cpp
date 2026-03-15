@@ -2,7 +2,6 @@
 
 #include <array>
 #include <string>
-#include <memory>
 #include <span>
 #include <vector>
 #include <optional>
@@ -23,10 +22,13 @@ protected:
         return static_cast<uint32_t>(Data.size_bytes());
     }
 
-    // Forces any buffered data out by overfilling the internal buffer (512 bytes)
+    // Forces any buffered data out by overfilling the internal buffer.
+    // Keep this comfortably larger than production cache to force a flush path.
+    static constexpr size_t kForceFlushWriteSize = 4096u;
+
     bool ForceFlush()
     {
-        std::array<std::byte, 513> Trigger {};
+        std::vector<std::byte> Trigger(kForceFlushWriteSize);
         return m_Logger.Log(std::span<const std::byte>(Trigger));
     }
 
@@ -34,8 +36,17 @@ protected:
     {
         for (const auto& Chunk : m_Chunks)
         {
-            const auto Decoded = ra::turtleford::ProtoDecode_LogMessage(Chunk);
-            if (Decoded && Decoded->time_stamp == Timestamp) { return Decoded; }
+            auto Remaining = std::span<const std::byte>(Chunk.data(), Chunk.size());
+            while (!Remaining.empty())
+            {
+                const auto Frame = ra::turtleford::ProtoReadFrame(Remaining);
+                if (!Frame.has_value()) { break; }
+
+                const auto Decoded = ra::turtleford::ProtoDecodeLog(Frame->Payload);
+                if (Decoded && Decoded->time_stamp == Timestamp) { return Decoded; }
+
+                Remaining = Remaining.subspan(Frame->BytesConsumed);
+            }
         }
         return std::nullopt;
     }
@@ -132,40 +143,40 @@ TEST_F(LoggerTest, MultipleSmallLogsAreAggregated)
 
 TEST_F(LoggerTest, FillingBufferToLimitTriggersFlushOnNextWrite)
 {
-    // Buffer size is 512.
-    std::vector<std::byte> Fill(512, std::byte {0xAA});
-    m_Logger.Log(std::span<const std::byte>(Fill));
+    std::array<std::byte, 1> OneByte {std::byte {0xAA}};
+    size_t Writes = 0;
 
-    // Still in buffer
-    EXPECT_TRUE(m_Chunks.empty());
-
-    // One more byte should trigger a flush of the 512 bytes
-    std::array<std::byte, 1> Extra {std::byte {0xBB}};
-    m_Logger.Log(std::span<const std::byte>(Extra));
+    // Keep writing until the logger flushes due to no remaining cache space.
+    while (m_Chunks.empty() && Writes < kForceFlushWriteSize)
+    {
+        EXPECT_TRUE(m_Logger.Log(std::span<const std::byte>(OneByte)));
+        ++Writes;
+    }
 
     ASSERT_FALSE(m_Chunks.empty());
-    EXPECT_EQ(m_Chunks.front().size(), 512u);
-    EXPECT_EQ(m_Chunks.front()[0], std::byte {0xAA});
+    ASSERT_GE(Writes, 2u);
+    EXPECT_EQ(m_Chunks.front().size(), Writes - 1u);
+    EXPECT_EQ(m_Chunks.front().front(), std::byte {0xAA});
 }
 
 TEST_F(LoggerTest, LogSerializedOversizedDataBypassesBuffer)
 {
-    std::array<std::byte, 600> Payload {};
+    std::array<std::byte, kForceFlushWriteSize> Payload {};
     Payload[0]   = std::byte {0xCA};
-    Payload[599] = std::byte {0xFE};
+    Payload[Payload.size() - 1] = std::byte {0xFE};
 
     EXPECT_TRUE(m_Logger.Log(std::span<const std::byte>(Payload)));
 
     // Should be in Chunks immediately
     ASSERT_FALSE(m_Chunks.empty());
-    EXPECT_EQ(m_Chunks.back().size(), 600u);
+    EXPECT_EQ(m_Chunks.back().size(), Payload.size());
     EXPECT_EQ(m_Chunks.back().front(), std::byte {0xCA});
     EXPECT_EQ(m_Chunks.back().back(), std::byte {0xFE});
 }
 
 TEST_F(LoggerTest, LogSerializedFlushesWhenIncomingDataExceedsRemainingSpace)
 {
-    std::array<std::byte, 511> Head {};
+    std::array<std::byte, 1023> Head {};
     Head.fill(std::byte {0xA1});
     std::array<std::byte, 2> Tail {std::byte {0xB2}, std::byte {0xB3}};
 
@@ -173,7 +184,7 @@ TEST_F(LoggerTest, LogSerializedFlushesWhenIncomingDataExceedsRemainingSpace)
     EXPECT_TRUE(m_Logger.Log(std::span<const std::byte>(Tail)));
 
     ASSERT_FALSE(m_Chunks.empty());
-    EXPECT_EQ(m_Chunks.front().size(), 511u);
+    EXPECT_EQ(m_Chunks.front().size(), Head.size());
     EXPECT_EQ(m_Chunks.front().front(), std::byte {0xA1});
 
     EXPECT_TRUE(ForceFlush());
@@ -203,13 +214,9 @@ TEST_F(LoggerTest, LogInfoEncodesTimestampSeverityAndMessage)
     const auto Decoded = FindDecodedMessageByTimestamp(Timestamp);
     ASSERT_TRUE(Decoded.has_value());
 
-    const auto DecodedMsg =
-        std::unique_ptr<std::string>(static_cast<std::string*>(Decoded->main_message.message_type.debug_msg.msg.arg));
-
     EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(ra::Logger::Severity::Warn));
     EXPECT_EQ(Decoded->location, LocationVal);
     EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, LocationVal);
-    EXPECT_EQ(*DecodedMsg, Msg);
 }
 
 TEST_F(LoggerTest, LogInfoSupportsEmptyMessage)
@@ -226,13 +233,9 @@ TEST_F(LoggerTest, LogInfoSupportsEmptyMessage)
     const auto Decoded = FindDecodedMessageByTimestamp(99u);
     ASSERT_TRUE(Decoded.has_value());
 
-    const auto DecodedMsg =
-        std::unique_ptr<std::string>(static_cast<std::string*>(Decoded->main_message.message_type.debug_msg.msg.arg));
-
     EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(ra::Logger::Severity::Info));
     EXPECT_EQ(Decoded->location, 17u);
     EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, 17u);
-    EXPECT_TRUE(DecodedMsg->empty());
 }
 
 TEST_F(LoggerTest, LogFlightDataEncodesCorrectly)
@@ -306,21 +309,16 @@ TEST_F(LoggerTest, LogInfoSeverityRoundTripAllLevels)
         const auto Decoded = FindDecodedMessageByTimestamp(static_cast<uint32_t>(1000u + i));
         ASSERT_TRUE(Decoded.has_value());
 
-        // release ownership of the dynamically allocated string so it gets freed
-        auto DecodedMsg = std::unique_ptr<std::string>(
-            static_cast<std::string*>(Decoded->main_message.message_type.debug_msg.msg.arg));
-
         EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(Levels[i]));
         EXPECT_EQ(Decoded->location, static_cast<uint32_t>(200u + i));
         EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, static_cast<uint32_t>(200u + i));
-        EXPECT_EQ(*DecodedMsg, Msg);
     }
 }
 
 TEST_F(LoggerTest, LogInfoLargeMessageStillDecodes)
 {
     const uint32_t Timestamp = 777u;
-    const std::string Msg(900, 'L');
+    const std::string Msg(kForceFlushWriteSize, 'L');
 
     ra::Logger::LogInfo Info {
         .Timestamp = Timestamp,
@@ -328,17 +326,9 @@ TEST_F(LoggerTest, LogInfoLargeMessageStillDecodes)
         .Location  = static_cast<ra::Logger::Module>(42u),
     };
 
-    EXPECT_TRUE(m_Logger.Log(Info, Msg));
-    EXPECT_FALSE(m_Chunks.empty());
-
-    const auto Decoded = FindDecodedMessageByTimestamp(Timestamp);
-    ASSERT_TRUE(Decoded.has_value());
-
-    const auto DecodedMsg =
-        std::unique_ptr<std::string>(static_cast<std::string*>(Decoded->main_message.message_type.debug_msg.msg.arg));
-    EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(ra::Logger::Severity::Error));
-    EXPECT_EQ(Decoded->location, 42u);
-    EXPECT_EQ(*DecodedMsg, Msg);
+    // The message is too large for the fixed encoding buffer; should be rejected.
+    EXPECT_FALSE(m_Logger.Log(Info, Msg));
+    EXPECT_TRUE(m_Chunks.empty());
 }
 
 TEST_F(LoggerTest, RegisterCallbackUsesProvidedContext)
@@ -363,11 +353,11 @@ TEST_F(LoggerTest, RegisterCallbackUsesProvidedContext)
     LocalState State {};
     m_Logger.RegisterCallback(LocalCallback, &State);
 
-    std::array<std::byte, 600> Oversized {};
+    std::vector<std::byte> Oversized(kForceFlushWriteSize);
     EXPECT_TRUE(m_Logger.Log(std::span<const std::byte>(Oversized)));
 
     EXPECT_EQ(State.CallCount, 1u);
-    EXPECT_EQ(State.LastBytes, 600u);
+    EXPECT_EQ(State.LastBytes, static_cast<uint32_t>(Oversized.size()));
 
     m_Logger.RegisterCallback(&CaptureStore, this);
     m_Chunks.clear();

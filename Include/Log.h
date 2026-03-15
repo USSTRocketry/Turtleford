@@ -16,8 +16,9 @@ namespace ra
 {
 class Logger
 {
-    constexpr static auto BufferSize = 512;
-    using BufferType                 = bricks::CachedBuffer<BufferSize>;
+    constexpr static auto BufferSize = 256;
+    constexpr static auto CacheSize = 1024;
+    using BufferType                 = bricks::CachedBuffer<CacheSize>;
     using EnumType                   = uint_fast16_t;
 
 public:
@@ -54,21 +55,44 @@ public:
     // TODO : Separate package logic (to proto) from storing logic (writing to storage)
     bool Log(const LogInfo& Info, const ra::turtleford::type::FlightData& Data)
     {
-        // package incoming flight data for protobuf encoding
-        const auto FlightData = turtleford::PbGen_FlightData(Data);
-        const auto Encoded    = turtleford::ProtoEncode(
-            Info.Timestamp, static_cast<uint32_t>(Info.Level), static_cast<uint32_t>(Info.Location), FlightData);
+        static thread_local std::array<std::byte, BufferSize> StaticBuffer;
 
-        return Log(std::span {Encoded.data(), Encoded.size()});
+        const auto FlightData = turtleford::PbGen_FlightData(Data);
+        const auto Written = turtleford::ProtoEncode(
+            Info.Timestamp,
+            static_cast<uint32_t>(Info.Level),
+            static_cast<uint32_t>(Info.Location),
+            FlightData,
+            StaticBuffer,
+            turtleford::ProtoFlags::Framed);
+
+        if (Written == 0)
+        {
+            return false;
+        }
+
+        return Log(std::span<const std::byte>(StaticBuffer.data(), Written));
     }
 
     bool Log(const LogInfo& Info, const std::string& Msg)
     {
-        const auto DebugMsg = turtleford::PbGen_DebugMsg(static_cast<uint32_t>(Info.Location), Msg);
-        const auto Encoded  = turtleford::ProtoEncode(
-            Info.Timestamp, static_cast<uint32_t>(Info.Level), static_cast<uint32_t>(Info.Location), DebugMsg);
+        static thread_local std::array<std::byte, BufferSize> StaticBuffer;
 
-        return Log(std::span {Encoded.data(), Encoded.size()});
+        const auto DebugMsg = turtleford::PbGen_DebugMsg(static_cast<uint32_t>(Info.Location), Msg);
+        const auto Written = turtleford::ProtoEncode(
+            Info.Timestamp,
+            static_cast<uint32_t>(Info.Level),
+            static_cast<uint32_t>(Info.Location),
+            DebugMsg,
+            StaticBuffer,
+            turtleford::ProtoFlags::Framed);
+
+        if (Written == 0)
+        {
+            return false;
+        }
+
+        return Log(std::span<const std::byte>(StaticBuffer.data(), Written));
     }
 
     // Serialized data ONLY
