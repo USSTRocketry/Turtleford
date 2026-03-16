@@ -65,7 +65,6 @@ TEST(RadioCommandRecieverTest, SendCommandCallsRadioSend)
 TEST(RadioCommandRecieverTest, ReceiveCommandProcessesData)
 {
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
-    // auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
@@ -86,7 +85,6 @@ TEST(RadioCommandRecieverTest, ReceiveCommandProcessesData)
 TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
 {
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
-    // auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
@@ -112,7 +110,6 @@ TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
 TEST(RadioCommandRecieverTest, DebugMessageCallback)
 {
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
-    // auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
@@ -137,12 +134,15 @@ TEST(RadioCommandRecieverTest, DebugMessageCallback)
 TEST(RadioCommandRecieverTest, SwitchFrequencyCallback)
 {
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
-    auto* RadioPtr = Radio.get();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
     RadioCmndReciever receiver(Session);
+
+    ra::hal::WorkQueue Work_queue;
+    Work_queue.Init();
+    receiver.SetWorkQueue(&Work_queue);
 
     float newFreq = 1000;
 

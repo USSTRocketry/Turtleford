@@ -28,12 +28,12 @@ public:
 
     void RecieveCommand(const TransferContext& Context, std::span<const std::byte> Data);
 
+    void RadioCmndReciever::ManualTimeoutCancelSwitchFrequency();
+
 private:
     static void RecieveCommandPassthrough(RadioCmndReciever& reciever,
                                           const TransferContext& Context,
                                           std::span<const std::byte> Data);
-
-    void ManualTimeoutCancelSwitchFrequency();
 
     std::shared_ptr<ITransferSession> session;
 
