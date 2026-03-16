@@ -1,49 +1,59 @@
 #include "TurtlefordMain.h"
-//#include "ITelemetryRadio.h"
+// #include "ITelemetryRadio.h"
 
-namespace ra::turtleford{
+namespace ra::turtleford
+{
 
-
-void transferProocessWrapper(ra::hal::WorkQueue::WorkHandle &stuff){
-    ITransferSession *manager =  static_cast<ITransferSession*>(stuff.GetContext());
+void transferProocessWrapper(ra::hal::WorkQueue::WorkHandle& stuff)
+{
+    ITransferSession* manager = static_cast<ITransferSession*>(stuff.GetContext());
     manager->Process();
 }
 // TransferManager.CreateSession(std::make_unique<LoraTransferConfig>(2, 3)
-TurtlefordMain::TurtlefordMain(ITransferSession* session) : CommandSenderReciever(session)
+TurtlefordMain::TurtlefordMain(std::shared_ptr<ITransferSession> session) : CommandSenderReciever(session)
 {
     WorkQueue.Init();
 
     CommandSenderReciever.SetWorkQueue(&WorkQueue);
 
-    hal::WorkQueue::SubmitOptions subOps{};
+    hal::WorkQueue::SubmitOptions subOps {};
 
-    subOps.Exec.Ctx = session;
+    subOps.Exec.Ctx           = session.get();
     subOps.Exec.PriorityValue = hal::WorkQueue::Priority::High;
-    subOps.Exec.Fn = transferProocessWrapper;
+    subOps.Exec.Fn            = transferProocessWrapper;
 
     subOps.Sched.Iterations = std::numeric_limits<uint32_t>::max();
 
     const auto handle = WorkQueue.Submit(subOps);
-    
 }
 
-void TurtlefordMain::Update(){
+void TurtlefordMain::Update()
+{
 #if !(WORK_QUEUE_PREEMPTIVE)
     WorkQueue.Run();
 #endif
 }
 
-void TurtlefordMain::SetRecieveDataCallback(void (*RecieveData)(Proto_InFlightData)){
+void TurtlefordMain::SetRecieveDataCallback(std::function<void(Proto_InFlightData)> RecieveData)
+{
     CommandSenderReciever.RecieveData = RecieveData;
 }
 
-void TurtlefordMain::SetDebugMsgCallback(void (*DebugMessage)(std::unique_ptr<std::string>)){
+void TurtlefordMain::SetDebugMsgCallback(std::function<void(std::unique_ptr<std::string>)> DebugMessage)
+{
     CommandSenderReciever.DebugMessage = DebugMessage;
 }
 
-void TurtlefordMain::SetInfoExchangeCallback(void (*InfoExchange)(Proto_InfoExchange)){
+void TurtlefordMain::SetInfoExchangeCallback(std::function<void(Proto_InfoExchange)> InfoExchange)
+{
     CommandSenderReciever.InfoExchange = InfoExchange;
 }
 
+void TurtlefordMain::SetSwitchFrequencyCallback(std::function<void(float)> SetFrequency)
+{
+    CommandSenderReciever.SwitchRadioFrequency = SetFrequency;
 }
 
+void TurtlefordMain::SendCmnd(Proto_MainMessage msg) { CommandSenderReciever.SendCmnd(msg); }
+
+} // namespace ra::turtleford

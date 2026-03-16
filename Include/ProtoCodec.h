@@ -38,5 +38,5 @@ Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string& Str);
 
 Proto_MainMessage PbGen_SwitchFrequencyMsg(float NewFrequency);
 
-Proto_MainMessage PbGen_AckMsg(int ack_to);
+Proto_MainMessage PbGen_AckMsg(uint32_t ack_to);
 } // namespace ra::turtleford

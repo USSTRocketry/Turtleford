@@ -37,4 +37,5 @@ target_sources(${TEST_RUNNER} PRIVATE
   TestPb.cpp
   TestLoraTransport.cpp
   TestLog.cpp
+  TestRadCmndReciever.cpp
 )

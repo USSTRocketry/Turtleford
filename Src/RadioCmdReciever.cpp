@@ -9,9 +9,7 @@ namespace ra::turtleford
 {
 
 // A timeout that once the timer expires, switches radio state to ready and cancels the frequency switch
-void RadioCmndReciever::ManualTimeoutCancelSwitchFrequency(){
-    state = RadState::READY;
-}
+void RadioCmndReciever::ManualTimeoutCancelSwitchFrequency() { state = RadState::READY; }
 
 void RadioCmndReciever::ThreadRun(Proto_MainMessage Msg)
 {
@@ -28,7 +26,7 @@ void RadioCmndReciever::ThreadRun(Proto_MainMessage Msg)
             }
             break;
         case Proto_MainMessage_info_exchange_tag:
-            if (InfoExchange != nullptr) { InfoExchange(Msg.message_type.info_exchange);}
+            if (InfoExchange != nullptr) { InfoExchange(Msg.message_type.info_exchange); }
             break;
         default:
             break;
@@ -36,34 +34,39 @@ void RadioCmndReciever::ThreadRun(Proto_MainMessage Msg)
 }
 
 // recieves a command from the radio and decodes it using the message type to determine what it will do
-void RadioCmndReciever::RecieveCommand(const TransferContext& Context, std::span<const std::byte> Data)
+void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const std::byte> Data)
 {
     const auto MsgOption = ProtoDecode_MainMessage(Data);
 
-    if(!MsgOption.has_value()){
+    if (!MsgOption.has_value())
+    {
         // THIS IS AN ERROR
-        
+
         return;
     }
 
     const auto Msg = MsgOption.value();
-    
 
-    if(Msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag || Msg.which_message_type == Proto_MainMessage_ack_tag){
+    if (Msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag ||
+        Msg.which_message_type == Proto_MainMessage_ack_tag)
+    {
         switch (state)
         {
             case RadState::READY:
-                state = RadState::WAITING_FOR_ACK;
+                state             = RadState::WAITING_FOR_ACK;
+                newRadioFrequency = Msg.message_type.switch_radio_frequency.new_frequency;
                 // ADD TO Work Queue
+
                 // ManualTimeoutCancelSwitchFrequency();
                 SendCmnd(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
-                
+
                 break;
             case RadState::WAITING_FOR_ACK:
                 if (Msg.which_message_type == Proto_MainMessage_ack_tag &&
                     Msg.message_type.ack.response_to_which_message == Proto_MainMessage_switch_radio_frequency_tag)
                 {
-                    //SWITCH FREQUENCY HERE
+                    // SWITCH FREQUENCY HERE
+                    SwitchRadioFrequency(newRadioFrequency);
                     // SEND ACK BACK HERE
                     SendCmnd(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
                     state = RadState::SWITCHING_FREQUENCY;
@@ -71,43 +74,30 @@ void RadioCmndReciever::RecieveCommand(const TransferContext& Context, std::span
 
                 break;
             case RadState::SWITCHING_FREQUENCY:
-                if (Msg.which_message_type == Proto_MainMessage_ack_tag)
-                {
-                    state = RadState::READY;
-                }else{
-                    ThreadRun(Msg);
-                }
+                if (Msg.which_message_type == Proto_MainMessage_ack_tag) { state = RadState::READY; }
+                else { ThreadRun(Msg); }
                 break;
             default:
                 break;
-        }        
+        }
     }
-    else{
-        ThreadRun(Msg);
-    }
-    
+    else { ThreadRun(Msg); }
 }
 
-void RadioCmndReciever::SetWorkQueue(hal::WorkQueue* work_queue){
-    WorkQueue = work_queue;
-}
+void RadioCmndReciever::SetWorkQueue(hal::WorkQueue* work_queue) { WorkQueue = work_queue; }
 
-
-RadioCmndReciever::RadioCmndReciever(ITransferSession* session_in)
+RadioCmndReciever::RadioCmndReciever(std::shared_ptr<ITransferSession> session_in)
 {
     session = session_in;
-    //insane c++ magic (lambda func)
-    session->RegisterCallback([&](auto ...arg){RecieveCommand(arg...);});
-    
+    // insane c++ magic (lambda func)
+    session->RegisterCallback([&](auto... arg) { RecieveCommand(arg...); });
 }
 
 // send over the radio
 void RadioCmndReciever::SendCmnd(Proto_MainMessage msg)
 {
     const auto encoded = ProtoEncode(msg);
-    if(msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag){
-        state = RadState::WAITING_FOR_ACK;
-    }
+    if (msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag) { state = RadState::WAITING_FOR_ACK; }
     session->Send(encoded);
 }
 

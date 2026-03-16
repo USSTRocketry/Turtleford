@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ProtoMain.pb.h"
 #include "WorkQueue.h"
 #include "Transport/TransferSession.h"
@@ -10,32 +12,36 @@ namespace ra::turtleford
 class RadioCmndReciever
 {
 public:
-    RadioCmndReciever(ITransferSession* session_in);
+    RadioCmndReciever(std::shared_ptr<ITransferSession> session_in);
 
-    void (*RecieveData)(Proto_InFlightData) = nullptr;
+    std::function<void(Proto_InFlightData)> RecieveData;
 
-    void (*SwitchRadioFrequency)(float) = nullptr;
+    std::function<void(float)> SwitchRadioFrequency;
 
-    void (*DebugMessage)(std::unique_ptr<std::string>) = nullptr;
+    std::function<void(std::unique_ptr<std::string>)> DebugMessage;
 
-    void (*InfoExchange)(Proto_InfoExchange) = nullptr;
+    std::function<void(Proto_InfoExchange)> InfoExchange;
 
     void SendCmnd(Proto_MainMessage msg);
 
     void SetWorkQueue(hal::WorkQueue* work_queue);
-    
+
     void RecieveCommand(const TransferContext& Context, std::span<const std::byte> Data);
 
 private:
-    static void RecieveCommandPassthrough(RadioCmndReciever& reciever, const TransferContext& Context, std::span<const std::byte> Data);
+    static void RecieveCommandPassthrough(RadioCmndReciever& reciever,
+                                          const TransferContext& Context,
+                                          std::span<const std::byte> Data);
 
     void ManualTimeoutCancelSwitchFrequency();
 
-    ITransferSession* session;
+    std::shared_ptr<ITransferSession> session;
 
     hal::WorkQueue* WorkQueue;
 
     void ThreadRun(Proto_MainMessage Msg);
+
+    float newRadioFrequency = 0.0;
 
     enum class RadState
     {

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ProtoMain.pb.h"
 #include "WorkQueue.h"
 #include "RadioCmdReciever.h"
@@ -8,25 +10,29 @@ namespace ra::turtleford
 
 class TurtlefordMain
 {
-    public:
-        TurtlefordMain(ITransferSession* session);
+public:
+    TurtlefordMain(std::shared_ptr<ITransferSession> session);
 
-        void Update();
+    void Update();
 
-        void SetRecieveDataCallback(void (*RecieveData)(Proto_InFlightData));
+    std::function<void(float)> SwitchRadioFrequency;
 
-        void SetDebugMsgCallback(void (*DebugMessage)(std::unique_ptr<std::string>));
+    void SetRecieveDataCallback(std::function<void(Proto_InFlightData)> RecieveData);
 
-        void SetInfoExchangeCallback(void (*InfoExchange)(Proto_InfoExchange));
-    
-    private:
-        hal::WorkQueue WorkQueue;
+    void SetDebugMsgCallback(std::function<void(std::unique_ptr<std::string>)> DebugMessage);
 
-        RadioCmndReciever CommandSenderReciever;
+    void SetInfoExchangeCallback(std::function<void(Proto_InfoExchange)> InfoExchange);
 
-        // ITransferManager& TransferManager;
+    void SetSwitchFrequencyCallback(std::function<void(float)> SetFrequency);
 
+    void SendCmnd(Proto_MainMessage msg);
 
+private:
+    hal::WorkQueue WorkQueue;
+
+    RadioCmndReciever CommandSenderReciever;
+
+    // ITransferManager& TransferManager;
 };
 
-};
+}; // namespace ra::turtleford
