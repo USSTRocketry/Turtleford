@@ -75,7 +75,11 @@ TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
 
     receiver.RecieveCommand(context, buffer);
 
+    // Work queue should process here
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     EXPECT_TRUE(called);
+    Work_queue.Deinit();
 }
 
 TEST(RadioCommandRecieverTest, DebugMessageCallback)
@@ -103,9 +107,11 @@ TEST(RadioCommandRecieverTest, DebugMessageCallback)
 
     receiver.RecieveCommand(context, buffer);
 
-    
+    // Work queue should process here
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     EXPECT_TRUE(called);
+    Work_queue.Deinit();
 }
 
 TEST(RadioCommandRecieverTest, SwitchFrequencyCallback)
@@ -133,9 +139,16 @@ TEST(RadioCommandRecieverTest, SwitchFrequencyCallback)
 
     receiver.RecieveCommand(context, switchCommand);
 
+    // Work queue should process here
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     std::vector<std::byte> ackSwitch = ProtoEncode(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
 
     receiver.RecieveCommand(context, ackSwitch);
 
+    // Work queue should process here
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     EXPECT_EQ(newFreq, 0.0);
+    Work_queue.Deinit();
 }

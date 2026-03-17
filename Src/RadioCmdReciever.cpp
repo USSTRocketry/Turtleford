@@ -122,7 +122,7 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
         thread_run_data->msg = Msg;
         thread_run_data->radioCmndReciever = this;
 
-        subOps.Exec.Ctx           = this;
+        subOps.Exec.Ctx           = thread_run_data;
         subOps.Exec.PriorityValue = hal::WorkQueue::Priority::Low;
         subOps.Exec.Fn            = ThreadRunWrapper;
 
