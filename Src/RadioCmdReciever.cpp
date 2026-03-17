@@ -108,6 +108,7 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
                     SendCmnd(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
                     // SWITCH FREQUENCY HERE
                     SwitchRadioFrequency(newRadioFrequency);
+                    WorkQueue->Cancel(ManualTimeoutWorkHandle);
                 }
                 break;
             default:
