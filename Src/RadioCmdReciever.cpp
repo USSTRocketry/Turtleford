@@ -79,6 +79,13 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
     // have to initialise it here because of switch wierdness
     hal::WorkQueue::SubmitOptions subOps {};
 
+    if(state == RadState::SWITCHING_FREQUENCY)
+    {
+        //if I get any message on the new frequency, then successful transition
+        state = RadState::READY;
+        WorkQueue->Cancel(ManualTimeoutWorkHandle);
+    }
+
     if (Msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag ||
         Msg.which_message_type == Proto_MainMessage_ack_tag)
     {
@@ -108,7 +115,6 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
                     SendCmnd(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
                     // SWITCH FREQUENCY HERE
                     SwitchRadioFrequency(newRadioFrequency);
-                    WorkQueue->Cancel(ManualTimeoutWorkHandle);
                 }
                 break;
             default:
