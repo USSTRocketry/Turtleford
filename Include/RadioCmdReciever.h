@@ -28,7 +28,7 @@ public:
 
     void RecieveCommand(const TransferContext& Context, std::span<const std::byte> Data);
 
-    void RadioCmndReciever::ManualTimeoutCancelSwitchFrequency();
+    void ManualTimeoutCancelSwitchFrequency();
 
 private:
     static void RecieveCommandPassthrough(RadioCmndReciever& reciever,
