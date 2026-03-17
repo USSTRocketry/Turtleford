@@ -5,6 +5,7 @@
 #include "Transport/TransferSession.h"
 #include <memory>
 #include <span>
+#include <optional>
 
 namespace ra::turtleford
 {
@@ -12,7 +13,7 @@ namespace ra::turtleford
 class RadioCmndReciever
 {
 public:
-    RadioCmndReciever(std::shared_ptr<ITransferSession> session_in);
+    RadioCmndReciever(std::shared_ptr<ITransferSession> session_in, float initial_radio_frequency);
 
     std::function<void(Proto_InFlightData)> RecieveData;
 
@@ -30,6 +31,15 @@ public:
 
     void ManualTimeoutCancelSwitchFrequency();
 
+    void ThreadRun(Proto_MainMessage Msg);
+
+    struct ThreadRunStruct
+    {
+        RadioCmndReciever* radioCmndReciever;
+        Proto_MainMessage msg;
+    };
+    
+
 private:
     static void RecieveCommandPassthrough(RadioCmndReciever& reciever,
                                           const TransferContext& Context,
@@ -39,9 +49,10 @@ private:
 
     hal::WorkQueue* WorkQueue;
 
-    void ThreadRun(Proto_MainMessage Msg);
+    hal::WorkQueue::WorkHandle ManualTimeoutWorkHandle {}; 
 
     float newRadioFrequency = 0.0;
+    float oldRadioFrequency = 0.0;
 
     enum class RadState
     {

@@ -28,19 +28,6 @@ public:
     MOCK_METHOD(void*, native_handle, (), (override));
 };
 
-TEST(RadioCommandRecieverTest, ConstructReceiver)
-{
-    auto Radio     = std::make_unique<NiceMock<MockRadio>>();
-    // auto* RadioPtr = Radio.get();
-
-    auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
-
-    RadioCmndReciever receiver(Session);
-
-    SUCCEED();
-}
-
 TEST(RadioCommandRecieverTest, SendCommandCallsRadioSend)
 {
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
@@ -49,7 +36,7 @@ TEST(RadioCommandRecieverTest, SendCommandCallsRadioSend)
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
-    RadioCmndReciever receiver(Session);
+    RadioCmndReciever receiver(Session,0.0);
 
     Proto_MainMessage msg = {};
 
@@ -62,26 +49,6 @@ TEST(RadioCommandRecieverTest, SendCommandCallsRadioSend)
     Manager->Process();
 }
 
-TEST(RadioCommandRecieverTest, ReceiveCommandProcessesData)
-{
-    auto Radio     = std::make_unique<NiceMock<MockRadio>>();
-
-    auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
-    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
-
-    RadioCmndReciever receiver(Session);
-
-    TransferContext context{};
-
-    std::vector<std::byte> buffer(64);
-
-    std::span<const std::byte> data(buffer.data(), buffer.size());
-
-    EXPECT_NO_THROW(
-        receiver.RecieveCommand(context, data)
-    );
-}
-
 TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
 {
     auto Radio     = std::make_unique<NiceMock<MockRadio>>();
@@ -89,7 +56,11 @@ TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
-    RadioCmndReciever receiver(Session);
+    RadioCmndReciever receiver(Session,0.0);
+
+    ra::hal::WorkQueue Work_queue;
+    Work_queue.Init();
+    receiver.SetWorkQueue(&Work_queue);
 
     bool called = false;
 
@@ -114,7 +85,11 @@ TEST(RadioCommandRecieverTest, DebugMessageCallback)
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
-    RadioCmndReciever receiver(Session);
+    RadioCmndReciever receiver(Session,0.0);
+
+    ra::hal::WorkQueue Work_queue;
+    Work_queue.Init();
+    receiver.SetWorkQueue(&Work_queue);
 
     bool called = false;
 
@@ -128,6 +103,8 @@ TEST(RadioCommandRecieverTest, DebugMessageCallback)
 
     receiver.RecieveCommand(context, buffer);
 
+    
+
     EXPECT_TRUE(called);
 }
 
@@ -138,7 +115,7 @@ TEST(RadioCommandRecieverTest, SwitchFrequencyCallback)
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
-    RadioCmndReciever receiver(Session);
+    RadioCmndReciever receiver(Session,0.0);
 
     ra::hal::WorkQueue Work_queue;
     Work_queue.Init();

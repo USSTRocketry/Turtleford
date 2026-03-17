@@ -22,12 +22,25 @@ void RadioCmndReciever::ManualTimeoutCancelSwitchFrequency()
         state = RadState::READY;
     }
     else if (state == RadState::SWITCHING_FREQUENCY){
-        //TODO: find out how to find old frequency because program doesnt have access to it
-        //  then call the switch frequency func to switch back
+        newRadioFrequency = oldRadioFrequency;
+        SwitchRadioFrequency(oldRadioFrequency);
         state = RadState::READY;
     }
 }
 
+/**
+ * This function is a wrapper that takes a void 
+ */
+void ThreadRunWrapper(ra::hal::WorkQueue::WorkHandle& data){
+    RadioCmndReciever::ThreadRunStruct *threadRunData = static_cast<RadioCmndReciever::ThreadRunStruct *>(data.GetContext());
+    threadRunData->radioCmndReciever->ThreadRun(threadRunData->msg);
+    // this is nessicary with how I use malloc to store the context
+    free(data.GetContext());
+}
+
+/**
+ * This function needs to be run in a thread to maintain performance, can be called outside of a thread but not recommended
+ */
 void RadioCmndReciever::ThreadRun(Proto_MainMessage Msg)
 {
     switch (Msg.which_message_type)
@@ -62,7 +75,7 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
         return;
     }
 
-    const auto Msg = MsgOption.value();
+    const Proto_MainMessage &Msg = MsgOption.value();
     // have to initialise it here because of switch wierdness
     hal::WorkQueue::SubmitOptions subOps {};
 
@@ -73,6 +86,7 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
         {
             case RadState::READY:
                 state             = RadState::WAITING_FOR_ACK;
+                oldRadioFrequency = newRadioFrequency;
                 newRadioFrequency = Msg.message_type.switch_radio_frequency.new_frequency;
                 // ADD TO Work Queue
                 subOps.Exec.Ctx           = this;
@@ -82,7 +96,7 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
                 subOps.Sched.Iterations = 1;
                 subOps.Sched.DelayMs    = 3000;
 
-                WorkQueue->Submit(subOps);
+                ManualTimeoutWorkHandle = WorkQueue->Submit(subOps).second;
 
                 SendCmnd(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
 
@@ -94,27 +108,44 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
                     SendCmnd(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
                     // SWITCH FREQUENCY HERE
                     SwitchRadioFrequency(newRadioFrequency);
-                    // SEND ACK BACK HERE
-                    
-                    state = RadState::SWITCHING_FREQUENCY;
                 }
-
-                break;
-            case RadState::SWITCHING_FREQUENCY:
-                if (Msg.which_message_type == Proto_MainMessage_ack_tag) { state = RadState::READY; }
-                else { ThreadRun(Msg); }
                 break;
             default:
                 break;
         }
     }
-    else { ThreadRun(Msg); }
+    else
+    {
+        hal::WorkQueue::SubmitOptions subOps {};
+
+        ThreadRunStruct *thread_run_data = static_cast<ThreadRunStruct*>(malloc(sizeof(ThreadRunStruct)));
+        thread_run_data->msg = Msg;
+        thread_run_data->radioCmndReciever = this;
+
+        subOps.Exec.Ctx           = this;
+        subOps.Exec.PriorityValue = hal::WorkQueue::Priority::Low;
+        subOps.Exec.Fn            = ThreadRunWrapper;
+
+        subOps.Sched.Iterations = 1;
+        subOps.Sched.DelayMs    = 0;
+
+        ManualTimeoutWorkHandle = WorkQueue->Submit(subOps).second;
+        //ThreadRun(Msg);
+    }
+    
 }
 
+/**
+ * sets the work queue needed for this class to run
+ */
 void RadioCmndReciever::SetWorkQueue(hal::WorkQueue* work_queue) { WorkQueue = work_queue; }
 
-RadioCmndReciever::RadioCmndReciever(std::shared_ptr<ITransferSession> session_in)
+/**
+ * initialises the RadioCmndReciever, must have the setWorkQueue function called after the class is initalised
+ */
+RadioCmndReciever::RadioCmndReciever(std::shared_ptr<ITransferSession> session_in, float initial_radio_frequency)
 {
+    newRadioFrequency = initial_radio_frequency;
     session = session_in;
     // insane c++ magic (lambda func)
     session->RegisterCallback([&](auto... arg) { RecieveCommand(arg...); });
