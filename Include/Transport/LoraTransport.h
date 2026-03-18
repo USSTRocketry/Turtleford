@@ -140,7 +140,7 @@ public:
      *
      * Note: Currently assumes single-threaded operation for receive processing.
      */
-    void Process();
+    void Process() override;
 
 public:
     /**

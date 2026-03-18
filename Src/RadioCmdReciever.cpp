@@ -119,6 +119,9 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
                     // SWITCH FREQUENCY HERE
                     SwitchRadioFrequency(newRadioFrequency);
                     state = RadState::SWITCHING_FREQUENCY;
+                    // send a new message on that frequency to confirm change
+                    // I think this could have timing issues (I will have to think on this further)
+                    SendCmnd(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
                 }
                 break;
             default:
