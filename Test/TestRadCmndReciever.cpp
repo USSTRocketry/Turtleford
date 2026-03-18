@@ -36,13 +36,11 @@ TEST(RadioCommandRecieverTest, SendCommandCallsRadioSend)
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
-    RadioCmndReciever receiver(Session,0.0);
+    RadioCmndReciever receiver(Session, 0.0);
 
     Proto_MainMessage msg = {};
 
-    EXPECT_CALL(*RadioPtr, send(_))
-        .Times(1)
-        .WillOnce(Return(true));
+    EXPECT_CALL(*RadioPtr, send(_)).Times(1).WillOnce(Return(true));
 
     receiver.SendCmnd(msg);
 
@@ -51,12 +49,12 @@ TEST(RadioCommandRecieverTest, SendCommandCallsRadioSend)
 
 TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
 {
-    auto Radio     = std::make_unique<NiceMock<MockRadio>>();
+    auto Radio = std::make_unique<NiceMock<MockRadio>>();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
-    RadioCmndReciever receiver(Session,0.0);
+    RadioCmndReciever receiver(Session, 0.0);
 
     ra::hal::WorkQueue Work_queue;
     Work_queue.Init();
@@ -64,19 +62,16 @@ TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
 
     bool called = false;
 
-    receiver.RecieveData = [&](Proto_InFlightData)
-    {
-        called = true;
-    };
+    receiver.RecieveData = [&](Proto_InFlightData) { called = true; };
 
-    TransferContext context{};
-    const type::FlightData data = {};
+    TransferContext context {};
+    const type::FlightData data   = {};
     std::vector<std::byte> buffer = ProtoEncode(PbGen_FlightData(data));
 
     receiver.RecieveCommand(context, buffer);
 
     // Work queue should process here
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     EXPECT_TRUE(called);
     Work_queue.Deinit();
@@ -84,12 +79,12 @@ TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
 
 TEST(RadioCommandRecieverTest, DebugMessageCallback)
 {
-    auto Radio     = std::make_unique<NiceMock<MockRadio>>();
+    auto Radio = std::make_unique<NiceMock<MockRadio>>();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
-    RadioCmndReciever receiver(Session,0.0);
+    RadioCmndReciever receiver(Session, 0.0);
 
     ra::hal::WorkQueue Work_queue;
     Work_queue.Init();
@@ -97,18 +92,15 @@ TEST(RadioCommandRecieverTest, DebugMessageCallback)
 
     bool called = false;
 
-    receiver.DebugMessage = [&](std::unique_ptr<std::string>)
-    {
-        called = true;
-    };
+    receiver.DebugMessage = [&](std::unique_ptr<std::string>) { called = true; };
 
-    TransferContext context{};
-    std::vector<std::byte> buffer = ProtoEncode(PbGen_DebugMsg(0,std::string("Hello World")));
+    TransferContext context {};
+    std::vector<std::byte> buffer = ProtoEncode(PbGen_DebugMsg(0, std::string("Hello World")));
 
     receiver.RecieveCommand(context, buffer);
 
     // Work queue should process here
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     EXPECT_TRUE(called);
     Work_queue.Deinit();
@@ -116,12 +108,12 @@ TEST(RadioCommandRecieverTest, DebugMessageCallback)
 
 TEST(RadioCommandRecieverTest, SwitchFrequencyCallback)
 {
-    auto Radio     = std::make_unique<NiceMock<MockRadio>>();
+    auto Radio = std::make_unique<NiceMock<MockRadio>>();
 
     auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
     auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
 
-    RadioCmndReciever receiver(Session,0.0);
+    RadioCmndReciever receiver(Session, 0.0);
 
     ra::hal::WorkQueue Work_queue;
     Work_queue.Init();
@@ -129,12 +121,45 @@ TEST(RadioCommandRecieverTest, SwitchFrequencyCallback)
 
     float newFreq = 1000;
 
-    receiver.SwitchRadioFrequency = [&](float freq)
-    {
-        newFreq = freq;
-    };
+    receiver.SwitchRadioFrequency = [&](float freq) { newFreq = freq; };
 
-    TransferContext context{};
+    TransferContext context {};
+    std::vector<std::byte> switchCommand = ProtoEncode(PbGen_SwitchFrequencyMsg(0.0));
+
+    receiver.RecieveCommand(context, switchCommand);
+
+    // Work queue should process here
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    std::vector<std::byte> ackSwitch = ProtoEncode(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
+
+    receiver.RecieveCommand(context, ackSwitch);
+
+    // Work queue should process here
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    EXPECT_EQ(newFreq, 0.0);
+    Work_queue.Deinit();
+}
+
+TEST(RadioCommandRecieverTest, SwitchFrequencyFail)
+{
+    auto Radio = std::make_unique<NiceMock<MockRadio>>();
+
+    auto Manager = std::make_shared<LoraTransferManager>(std::move(Radio));
+    auto Session = Manager->CreateSession(std::make_unique<LoraTransferConfig>(10, 20));
+
+    RadioCmndReciever receiver(Session, 1000.0);
+
+    ra::hal::WorkQueue Work_queue;
+    Work_queue.Init();
+    receiver.SetWorkQueue(&Work_queue);
+
+    float newFreq = 1000.0;
+
+    receiver.SwitchRadioFrequency = [&](float freq) { newFreq = freq; };
+
+    TransferContext context {};
     std::vector<std::byte> switchCommand = ProtoEncode(PbGen_SwitchFrequencyMsg(0.0));
 
     receiver.RecieveCommand(context, switchCommand);
@@ -147,8 +172,10 @@ TEST(RadioCommandRecieverTest, SwitchFrequencyCallback)
     receiver.RecieveCommand(context, ackSwitch);
 
     // Work queue should process here
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    EXPECT_EQ(newFreq, 0.0);
+    receiver.ManualTimeoutCancelSwitchFrequency();
+
+    EXPECT_NE(newFreq, 0.0);
     Work_queue.Deinit();
 }

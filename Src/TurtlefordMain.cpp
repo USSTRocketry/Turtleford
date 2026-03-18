@@ -10,7 +10,8 @@ void transferProocessWrapper(ra::hal::WorkQueue::WorkHandle& stuff)
     manager->Process();
 }
 // TransferManager.CreateSession(std::make_unique<LoraTransferConfig>(2, 3)
-TurtlefordMain::TurtlefordMain(std::shared_ptr<ITransferSession> session,float initialRadioFrequency) : CommandSenderReciever(session, initialRadioFrequency)
+TurtlefordMain::TurtlefordMain(std::shared_ptr<ITransferSession> session, float initialRadioFrequency) :
+    CommandSenderReciever(session, initialRadioFrequency)
 {
     WorkQueue.Init();
 

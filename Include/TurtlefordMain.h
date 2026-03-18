@@ -11,7 +11,7 @@ namespace ra::turtleford
 class TurtlefordMain
 {
 public:
-    TurtlefordMain(std::shared_ptr<ITransferSession> session,float initialRadioFrequency);
+    TurtlefordMain(std::shared_ptr<ITransferSession> session, float initialRadioFrequency);
 
     void Update();
 

@@ -38,7 +38,6 @@ public:
         RadioCmndReciever* radioCmndReciever;
         Proto_MainMessage msg;
     };
-    
 
 private:
     static void RecieveCommandPassthrough(RadioCmndReciever& reciever,
@@ -49,7 +48,7 @@ private:
 
     hal::WorkQueue* WorkQueue;
 
-    hal::WorkQueue::WorkHandle ManualTimeoutWorkHandle {}; 
+    hal::WorkQueue::WorkHandle ManualTimeoutWorkHandle {};
 
     float newRadioFrequency = 0.0;
     float oldRadioFrequency = 0.0;
