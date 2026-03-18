@@ -37,7 +37,7 @@ void ThreadRunWrapper(ra::hal::WorkQueue::WorkHandle& data)
         static_cast<RadioCmndReciever::ThreadRunStruct*>(data.GetContext());
     threadRunData->radioCmndReciever->ThreadRun(threadRunData->msg);
     // this is nessicary with how I use malloc to store the context
-    free(data.GetContext());
+    delete threadRunData;
 }
 
 /**
@@ -129,7 +129,7 @@ void RadioCmndReciever::RecieveCommand(const TransferContext&, std::span<const s
     {
         hal::WorkQueue::SubmitOptions subOps {};
 
-        ThreadRunStruct* thread_run_data   = static_cast<ThreadRunStruct*>(malloc(sizeof(ThreadRunStruct)));
+        ThreadRunStruct* thread_run_data   = new ThreadRunStruct;
         thread_run_data->msg               = Msg;
         thread_run_data->radioCmndReciever = this;
 

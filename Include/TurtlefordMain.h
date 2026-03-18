@@ -4,6 +4,7 @@
 #include "WorkQueue.h"
 #include "RadioCmdReciever.h"
 #include "Transport/TransferSession.h"
+#include "Transport/LoraTransport.h"
 
 namespace ra::turtleford
 {
@@ -11,7 +12,7 @@ namespace ra::turtleford
 class TurtlefordMain
 {
 public:
-    TurtlefordMain(std::shared_ptr<ITransferSession> session, float initialRadioFrequency);
+    TurtlefordMain(std::shared_ptr<ITransferManager> session, float initialRadioFrequency);
 
     void Update();
 

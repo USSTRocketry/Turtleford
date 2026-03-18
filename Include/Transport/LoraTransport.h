@@ -65,7 +65,6 @@ private:
     class LoraTransferSession final : public ITransferSession
     {
     public:
-        void Process(){}
         bool Send(std::span<const std::byte> Data) override;
         void RegisterCallback(ITransferSession::ReceiveCallback Cb) override;
         bool IsOpen() override;

@@ -6,12 +6,12 @@ namespace ra::turtleford
 
 void transferProocessWrapper(ra::hal::WorkQueue::WorkHandle& stuff)
 {
-    ITransferSession* manager = static_cast<ITransferSession*>(stuff.GetContext());
+    ITransferManager* manager = static_cast<ITransferManager*>(stuff.GetContext());
     manager->Process();
 }
 // TransferManager.CreateSession(std::make_unique<LoraTransferConfig>(2, 3)
-TurtlefordMain::TurtlefordMain(std::shared_ptr<ITransferSession> session, float initialRadioFrequency) :
-    CommandSenderReciever(session, initialRadioFrequency)
+TurtlefordMain::TurtlefordMain(std::shared_ptr<ITransferManager> manager, float initialRadioFrequency) : 
+    CommandSenderReciever(manager->CreateSession(std::make_unique<LoraTransferConfig>(2, 3)), initialRadioFrequency)
 {
     WorkQueue.Init();
 
@@ -19,7 +19,7 @@ TurtlefordMain::TurtlefordMain(std::shared_ptr<ITransferSession> session, float 
 
     hal::WorkQueue::SubmitOptions subOps {};
 
-    subOps.Exec.Ctx           = session.get();
+    subOps.Exec.Ctx           = manager.get();
     subOps.Exec.PriorityValue = hal::WorkQueue::Priority::High;
     subOps.Exec.Fn            = transferProocessWrapper;
 

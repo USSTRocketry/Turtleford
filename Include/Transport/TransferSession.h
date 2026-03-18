@@ -62,7 +62,6 @@ class ITransferSession
 public:
     using ReceiveCallback = std::function<void(const TransferContext& Context, std::span<const std::byte> Data)>;
 
-    virtual void Process() = 0;
     virtual bool Send(std::span<const std::byte> Data) = 0;
     virtual void RegisterCallback(ReceiveCallback Cb)  = 0;
 
@@ -96,6 +95,7 @@ struct ITransferManager
     virtual std::shared_ptr<ITransferSession> CreateSession(std::unique_ptr<ITransferConfig> cfg) = 0;
     virtual bool Close(const ITransferSession&)                                                   = 0;
     virtual std::shared_ptr<ITransferSession> GetSession(size_t id) const                         = 0;
+    virtual void Process()                                                                        = 0;
 };
 
 /**
