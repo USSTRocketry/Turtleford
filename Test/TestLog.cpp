@@ -8,7 +8,10 @@
 
 #include "Log.h"
 #include "ProtoCodec.h"
+#include "Random.h"
 #include "Type.h"
+
+static auto& RNG = ra::RNG::Instance();
 
 class LoggerTest : public ::testing::Test
 {
@@ -162,7 +165,7 @@ TEST_F(LoggerTest, FillingBufferToLimitTriggersFlushOnNextWrite)
 TEST_F(LoggerTest, LogSerializedOversizedDataBypassesBuffer)
 {
     std::array<std::byte, kForceFlushWriteSize> Payload {};
-    Payload[0]   = std::byte {0xCA};
+    Payload[0]                  = std::byte {0xCA};
     Payload[Payload.size() - 1] = std::byte {0xFE};
 
     EXPECT_TRUE(m_Logger.Log(std::span<const std::byte>(Payload)));
@@ -196,17 +199,18 @@ TEST_F(LoggerTest, LogSerializedFlushesWhenIncomingDataExceedsRemainingSpace)
 
 TEST_F(LoggerTest, LogInfoEncodesTimestampSeverityAndMessage)
 {
-    const uint32_t Timestamp   = 123456u;
-    const uint32_t LocationVal = 0xABCDu;
-    const std::string Msg      = "logger api test";
+    const uint32_t Timestamp = RNG.Value<uint32_t>();
+    const auto CategoryVal   = ra::type::Category::Application;
+    const uint32_t Status    = RNG.Value<uint32_t>();
+    const std::string Msg    = RNG.String(16);
 
     ra::Logger::LogInfo Info {
         .Timestamp = Timestamp,
         .Level     = ra::Logger::Severity::Warn,
-        .Location  = static_cast<ra::Logger::Module>(LocationVal),
+        .Category  = CategoryVal,
     };
 
-    EXPECT_TRUE(m_Logger.Log(Info, Msg));
+    EXPECT_TRUE(m_Logger.Log(Info, Status, Msg));
     EXPECT_TRUE(ForceFlush());
 
     ASSERT_GE(m_Chunks.size(), 1u);
@@ -215,41 +219,45 @@ TEST_F(LoggerTest, LogInfoEncodesTimestampSeverityAndMessage)
     ASSERT_TRUE(Decoded.has_value());
 
     EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(ra::Logger::Severity::Warn));
-    EXPECT_EQ(Decoded->location, LocationVal);
-    EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, LocationVal);
+    EXPECT_EQ(Decoded->category, static_cast<uint32_t>(CategoryVal));
+    EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, Status);
 }
 
 TEST_F(LoggerTest, LogInfoSupportsEmptyMessage)
 {
+    const uint32_t Timestamp = RNG.Value<uint32_t>();
+    const auto CategoryVal   = ra::type::Category::Application;
+    const uint32_t Status    = RNG.Value<uint32_t>();
+
     ra::Logger::LogInfo Info {
-        .Timestamp = 99u,
+        .Timestamp = Timestamp,
         .Level     = ra::Logger::Severity::Info,
-        .Location  = static_cast<ra::Logger::Module>(17u),
+        .Category  = CategoryVal,
     };
 
-    EXPECT_TRUE(m_Logger.Log(Info, ""));
+    EXPECT_TRUE(m_Logger.Log(Info, Status, ""));
     EXPECT_TRUE(ForceFlush());
 
-    const auto Decoded = FindDecodedMessageByTimestamp(99u);
+    const auto Decoded = FindDecodedMessageByTimestamp(Timestamp);
     ASSERT_TRUE(Decoded.has_value());
 
     EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(ra::Logger::Severity::Info));
-    EXPECT_EQ(Decoded->location, 17u);
-    EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, 17u);
+    EXPECT_EQ(Decoded->category, static_cast<uint32_t>(CategoryVal));
+    EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, Status);
 }
 
 TEST_F(LoggerTest, LogFlightDataEncodesCorrectly)
 {
-    const uint32_t Timestamp   = 555u;
-    const uint32_t LocationVal = 0x1234u;
+    const uint32_t Timestamp = 555u;
+    const auto CategoryVal   = ra::type::Category::Application;
     ra::Logger::LogInfo Info {
         .Timestamp = Timestamp,
         .Level     = ra::Logger::Severity::Info,
-        .Location  = static_cast<ra::Logger::Module>(LocationVal),
+        .Category  = CategoryVal,
     };
 
-    ra::turtleford::type::FlightData Data {};
-    Data.TimestampMs          = 42u;
+    ra::type::FlightData Data {};
+    Data.Timestamp            = 42u;
     Data.BMP_Data             = {1.1f, 2.2f, 3.3f};
     Data.AccelGyroTemperature = 4.4f;
     Data.Accel                = {.X = 5.5f, .Y = 6.6f, .Z = 7.7f};
@@ -264,9 +272,10 @@ TEST_F(LoggerTest, LogFlightDataEncodesCorrectly)
     ASSERT_TRUE(Decoded.has_value());
 
     EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(ra::Logger::Severity::Info));
-    EXPECT_EQ(Decoded->location, LocationVal);
+    EXPECT_EQ(Decoded->category, static_cast<uint32_t>(CategoryVal));
     const auto& Fd = Decoded->main_message.message_type.in_flight_data;
-    EXPECT_EQ(Fd.timestamp_ms, Data.TimestampMs);
+    EXPECT_TRUE(Fd.has_control);
+    EXPECT_EQ(Fd.control.timestamp, Data.Timestamp);
     EXPECT_FLOAT_EQ(Fd.bmp_data.temperature, Data.BMP_Data.Temperature);
     EXPECT_FLOAT_EQ(Fd.bmp_data.pressure, Data.BMP_Data.Pressure);
     EXPECT_FLOAT_EQ(Fd.bmp_data.altitude, Data.BMP_Data.Altitude);
@@ -295,23 +304,26 @@ TEST_F(LoggerTest, LogInfoSeverityRoundTripAllLevels)
     for (size_t i = 0; i < Levels.size(); ++i)
     {
         m_Chunks.clear();
-        const auto Msg = std::string("sev-") + std::to_string(i);
+        const auto Msg         = std::string("sev-") + std::to_string(i);
+        const auto CategoryVal = ra::type::Category::Application;
 
         ra::Logger::LogInfo Info {
             .Timestamp = static_cast<uint32_t>(1000u + i),
             .Level     = Levels[i],
-            .Location  = static_cast<ra::Logger::Module>(static_cast<uint32_t>(200u + i)),
+            .Category  = CategoryVal,
         };
 
-        EXPECT_TRUE(m_Logger.Log(Info, Msg));
+        const uint32_t Status = RNG.Value<uint32_t>();
+
+        EXPECT_TRUE(m_Logger.Log(Info, Status, Msg));
         EXPECT_TRUE(ForceFlush());
 
         const auto Decoded = FindDecodedMessageByTimestamp(static_cast<uint32_t>(1000u + i));
         ASSERT_TRUE(Decoded.has_value());
 
         EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(Levels[i]));
-        EXPECT_EQ(Decoded->location, static_cast<uint32_t>(200u + i));
-        EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, static_cast<uint32_t>(200u + i));
+        EXPECT_EQ(Decoded->category, static_cast<uint32_t>(CategoryVal));
+        EXPECT_EQ(Decoded->main_message.message_type.debug_msg.status, Status);
     }
 }
 
@@ -321,13 +333,12 @@ TEST_F(LoggerTest, LogInfoLargeMessageStillDecodes)
     const std::string Msg(kForceFlushWriteSize, 'L');
 
     ra::Logger::LogInfo Info {
-        .Timestamp = Timestamp,
-        .Level     = ra::Logger::Severity::Error,
-        .Location  = static_cast<ra::Logger::Module>(42u),
-    };
+        .Timestamp = Timestamp, .Level = ra::Logger::Severity::Error, .Category = ra::type::Category::Communications};
+
+    const uint32_t Status = RNG.Value<uint32_t>();
 
     // The message is too large for the fixed encoding buffer; should be rejected.
-    EXPECT_FALSE(m_Logger.Log(Info, Msg));
+    EXPECT_FALSE(m_Logger.Log(Info, Status, Msg));
     EXPECT_TRUE(m_Chunks.empty());
 }
 

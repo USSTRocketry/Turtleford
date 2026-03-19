@@ -80,10 +80,7 @@ constexpr ProtoFlags& operator|=(ProtoFlags& Left, ProtoFlags Right)
 
 namespace
 {
-constexpr bool HasFlag(ProtoFlags Value, ProtoFlags Flag)
-{
-    return (Value & Flag) != ProtoFlags::None;
-}
+constexpr bool HasFlag(ProtoFlags Value, ProtoFlags Flag) { return (Value & Flag) != ProtoFlags::None; }
 
 template <typename T>
 std::optional<T> PbDecode_Internal(std::span<const std::byte> Data, ProtoFlags Flags)
@@ -100,19 +97,16 @@ std::optional<T> PbDecode_Internal(std::span<const std::byte> Data, ProtoFlags F
     }
 
     auto Stream = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(Data.data()), Data.size());
-    const bool Decoded = HasFlag(Flags, ProtoFlags::Framed)
-                             ? pb_decode_ex(
-                                   &Stream,
-                                   nanopb::MessageDescriptor<decltype(Msg)>::fields(),
-                                   &Msg,
-                                   PB_DECODE_DELIMITED)
-                             : pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg);
+    const bool Decoded =
+        HasFlag(Flags, ProtoFlags::Framed)
+            ? pb_decode_ex(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg, PB_DECODE_DELIMITED)
+            : pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg);
     if (!Decoded) { return std::nullopt; }
     if (HasFlag(Flags, ProtoFlags::Framed) && Stream.bytes_left != 0) { return std::nullopt; }
 
     return Msg;
 }
-}
+} // namespace
 
 size_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer, ProtoFlags Flags)
 {
@@ -133,13 +127,15 @@ size_t ProtoWriteFrame(std::span<const std::byte> Payload, std::span<std::byte> 
 
 size_t ProtoEncode(uint32_t TimeStamp,
                    uint32_t Severity,
-                   uint32_t Location,
+                   type::Category Category,
                    const Proto_MainMessage& Message,
                    std::span<std::byte> Buffer,
                    ProtoFlags Flags)
 {
-    const Proto_LogMessage Msg {
-        .time_stamp = TimeStamp, .severity = Severity, .location = Location, .main_message = Message};
+    const Proto_LogMessage Msg {.time_stamp   = TimeStamp,
+                                .severity     = Severity,
+                                .category     = static_cast<Proto_Category>(Category),
+                                .main_message = Message};
     return PbEncode_Internal(Msg, Buffer, HasFlag(Flags, ProtoFlags::Framed) ? PB_ENCODE_DELIMITED : 0u);
 }
 
@@ -158,28 +154,30 @@ std::optional<ProtoFrame> ProtoReadFrame(std::span<const std::byte> Data)
     auto Stream = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(Data.data()), Data.size());
 
     uint64_t PayloadSize = 0;
-    if (!pb_decode_varint(&Stream, &PayloadSize) || PayloadSize > std::numeric_limits<size_t>::max()) { return std::nullopt; }
+    if (!pb_decode_varint(&Stream, &PayloadSize) || PayloadSize > std::numeric_limits<size_t>::max())
+    {
+        return std::nullopt;
+    }
 
-    const auto HeaderSize = Data.size() - Stream.bytes_left;
+    const auto HeaderSize   = Data.size() - Stream.bytes_left;
     const auto PayloadBytes = static_cast<size_t>(PayloadSize);
     if (Data.size() < HeaderSize + PayloadBytes) { return std::nullopt; }
 
-    return ProtoFrame {
-        .Payload = Data.subspan(HeaderSize, PayloadBytes),
-        .BytesConsumed = HeaderSize + PayloadBytes};
+    return ProtoFrame {.Payload = Data.subspan(HeaderSize, PayloadBytes), .BytesConsumed = HeaderSize + PayloadBytes};
 }
 
 Proto_MainMessage PbGen_FlightData(const type::FlightData& Data)
 {
     const Proto_InFlightData FD = {
-        .timestamp_ms           = Data.TimestampMs,
+        .has_control            = true,
+        .control                = {.timestamp = Data.Timestamp},
         .bmp_data               = {.temperature = Data.BMP_Data.Temperature,
                                    .pressure    = Data.BMP_Data.Pressure,
-                                   .altitude    = Data.BMP_Data.Altitude                                                       },
+                                   .altitude    = Data.BMP_Data.Altitude},
         .accel_gyro_temperature = Data.AccelGyroTemperature,
-        .accel                  = {                       .X = Data.Accel.X,        .Y = Data.Accel.Y,        .Z = Data.Accel.Z},
-        .gyro                   = {                        .X = Data.Gyro.X,         .Y = Data.Gyro.Y,         .Z = Data.Gyro.Z},
-        .magnetometer           = {                .X = Data.Magnetometer.X, .Y = Data.Magnetometer.Y, .Z = Data.Magnetometer.Z},
+        .accel                  = {.X = Data.Accel.X, .Y = Data.Accel.Y, .Z = Data.Accel.Z},
+        .gyro                   = {.X = Data.Gyro.X, .Y = Data.Gyro.Y, .Z = Data.Gyro.Z},
+        .magnetometer           = {.X = Data.Magnetometer.X, .Y = Data.Magnetometer.Y, .Z = Data.Magnetometer.Z},
         .thermometer            = Data.Thermometer
     };
 

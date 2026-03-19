@@ -10,7 +10,8 @@ auto& RNG = ra::RNG::Instance();
 
 namespace
 {
-std::vector<std::byte> EncodeMain(const Proto_MainMessage& Message, ra::turtleford::ProtoFlags Flags = ra::turtleford::ProtoFlags::None)
+std::vector<std::byte> EncodeMain(const Proto_MainMessage& Message,
+                                  ra::turtleford::ProtoFlags Flags = ra::turtleford::ProtoFlags::None)
 {
     const auto Size = ra::turtleford::ProtoEncode(Message, {}, Flags);
     std::vector<std::byte> Buffer(Size);
@@ -20,13 +21,13 @@ std::vector<std::byte> EncodeMain(const Proto_MainMessage& Message, ra::turtlefo
 
 std::vector<std::byte> EncodeLog(uint32_t Timestamp,
                                  uint32_t Severity,
-                                 uint32_t Location,
+                                 ra::type::Category Category,
                                  const Proto_MainMessage& Message,
                                  ra::turtleford::ProtoFlags Flags = ra::turtleford::ProtoFlags::None)
 {
-    const auto Size = ra::turtleford::ProtoEncode(Timestamp, Severity, Location, Message, {}, Flags);
+    const auto Size = ra::turtleford::ProtoEncode(Timestamp, Severity, Category, Message, {}, Flags);
     std::vector<std::byte> Buffer(Size);
-    if (Size > 0) { ra::turtleford::ProtoEncode(Timestamp, Severity, Location, Message, Buffer, Flags); }
+    if (Size > 0) { ra::turtleford::ProtoEncode(Timestamp, Severity, Category, Message, Buffer, Flags); }
     return Buffer;
 }
 
@@ -37,7 +38,7 @@ std::vector<std::byte> WriteFrame(std::span<const std::byte> Payload)
     if (Size > 0) { ra::turtleford::ProtoWriteFrame(Payload, Buffer); }
     return Buffer;
 }
-}
+} // namespace
 
 TEST(ProtoEncodeTest, ProtoEncodeSingle)
 {
@@ -73,11 +74,11 @@ TEST(ProtoEncodeTest, ProtoEncodeLogMessage)
     const auto Status        = RNG.Value<uint32_t>();
     const uint32_t Timestamp = RNG.Value<uint32_t>();
     const uint32_t Severity  = RNG.Value<uint32_t>();
-    const uint32_t Location  = RNG.Value<uint32_t>();
+    const auto Category      = ra::type::Category::Application;
     std::string TestStr      = RNG.String(RNG.Value<uint8_t>());
 
     const auto Data         = ra::turtleford::PbGen_DebugMsg(Status, TestStr);
-    const auto BytesWritten = EncodeLog(Timestamp, Severity, Location, Data).size();
+    const auto BytesWritten = EncodeLog(Timestamp, Severity, Category, Data).size();
 
     ASSERT_GT(BytesWritten, 0);
 }
@@ -87,11 +88,11 @@ TEST(ProtoFrameTest, ProtoFrameLogMessageRoundTrip)
     const auto Status        = RNG.Value<uint32_t>();
     const uint32_t Timestamp = RNG.Value<uint32_t>();
     const uint32_t Severity  = RNG.Value<uint32_t>();
-    const uint32_t Location  = RNG.Value<uint32_t>();
+    const auto Category      = ra::type::Category::Application;
     std::string TestStr      = RNG.String(RNG.Value<uint8_t>());
 
     const auto Data   = ra::turtleford::PbGen_DebugMsg(Status, TestStr);
-    const auto Framed = EncodeLog(Timestamp, Severity, Location, Data, ra::turtleford::ProtoFlags::Framed);
+    const auto Framed = EncodeLog(Timestamp, Severity, Category, Data, ra::turtleford::ProtoFlags::Framed);
 
     const auto Frame = ra::turtleford::ProtoReadFrame(Framed);
     ASSERT_TRUE(Frame.has_value());
@@ -105,7 +106,7 @@ TEST(ProtoFrameTest, ProtoFrameLogMessageRoundTrip)
 
     ASSERT_EQ(Decode->time_stamp, Timestamp);
     ASSERT_EQ(Decode->severity, Severity);
-    ASSERT_EQ(Decode->location, Location);
+    ASSERT_EQ(Decode->category, static_cast<uint32_t>(Category));
     ASSERT_EQ(Decode->main_message.message_type.debug_msg.status, Status);
     ASSERT_EQ(*MsgPtr, TestStr);
 }
@@ -113,7 +114,7 @@ TEST(ProtoFrameTest, ProtoFrameLogMessageRoundTrip)
 TEST(ProtoFrameTest, ProtoFrameWrapsExistingEncodedPayload)
 {
     const auto Message = ra::turtleford::PbGen_DebugMsg(42u, "wrapped");
-    const auto Encoded = EncodeLog(10u, 20u, 30u, Message);
+    const auto Encoded = EncodeLog(10u, 20u, ra::type::Category::Application, Message);
     const auto Framed  = WriteFrame(Encoded);
 
     const auto Frame = ra::turtleford::ProtoReadFrame(Framed);
@@ -125,8 +126,8 @@ TEST(ProtoFrameTest, ProtoFrameWrapsExistingEncodedPayload)
 
 TEST(ProtoFrameTest, ProtoFrameRejectsTruncatedMessage)
 {
-    const auto Data   = ra::turtleford::PbGen_DebugMsg(7u, "frame-test");
-    auto Framed = EncodeLog(1u, 2u, 3u, Data, ra::turtleford::ProtoFlags::Framed);
+    const auto Data = ra::turtleford::PbGen_DebugMsg(7u, "frame-test");
+    auto Framed     = EncodeLog(1u, 2u, ra::type::Category::Application, Data, ra::turtleford::ProtoFlags::Framed);
     ASSERT_GT(Framed.size(), 1u);
 
     Framed.pop_back();
@@ -163,10 +164,10 @@ TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
     const auto Status        = RNG.Value<uint32_t>();
     const uint32_t Timestamp = RNG.Value<uint32_t>();
     const uint32_t Severity  = RNG.Value<uint32_t>();
-    const uint32_t Location  = RNG.Value<uint32_t>();
+    const auto Category      = ra::type::Category::Application;
 
     const auto Data        = ra::turtleford::PbGen_DebugMsg(Status, TestStr);
-    const auto EncodedData = EncodeLog(Timestamp, Severity, Location, Data);
+    const auto EncodedData = EncodeLog(Timestamp, Severity, Category, Data);
 
     // Decode the LogMessage
     const auto Decode = ra::turtleford::ProtoDecodeLog(EncodedData);
@@ -179,7 +180,7 @@ TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
     // Verify if the LogMessage is correctly decoded
     ASSERT_EQ(decoded_log_msg.time_stamp, Timestamp);
     ASSERT_EQ(decoded_log_msg.severity, Severity);
-    ASSERT_EQ(decoded_log_msg.location, Location);
+    ASSERT_EQ(decoded_log_msg.category, static_cast<uint32_t>(Category));
     ASSERT_EQ(decoded_log_msg.main_message.which_message_type, Proto_MainMessage_debug_msg_tag);
     ASSERT_EQ(decoded_log_msg.main_message.message_type.debug_msg.status, Status);
     ASSERT_EQ(*MsgPtr, TestStr);

@@ -17,8 +17,8 @@ namespace ra::turtleford
 {
 enum class ProtoFlags : uint8_t
 {
-    None    = 0,
-    Framed  = 1u << 0,
+    None   = 0,
+    Framed = 1u << 0,
 };
 
 constexpr ProtoFlags operator|(ProtoFlags Left, ProtoFlags Right);
@@ -30,31 +30,23 @@ struct ProtoFrame
     std::span<const std::byte> Payload;
     size_t BytesConsumed;
 };
-}
+} // namespace ra::turtleford
 
 namespace ra::turtleford
 {
 size_t ProtoWriteFrame(std::span<const std::byte> Payload, std::span<std::byte> Buffer);
 std::optional<ProtoFrame> ProtoReadFrame(std::span<const std::byte> Data);
 
-size_t ProtoEncode(
-    const Proto_MainMessage& Message,
-    std::span<std::byte> Buffer,
-    ProtoFlags Flags = ProtoFlags::None);
-size_t ProtoEncode(
-    uint32_t TimeStamp,
-    uint32_t Severity,
-    uint32_t Location,
-    const Proto_MainMessage& Message,
-    std::span<std::byte> Buffer,
-    ProtoFlags Flags = ProtoFlags::None);
+size_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer, ProtoFlags Flags = ProtoFlags::None);
+size_t ProtoEncode(uint32_t TimeStamp,
+                   uint32_t Severity,
+                   type::Category Category,
+                   const Proto_MainMessage& Message,
+                   std::span<std::byte> Buffer,
+                   ProtoFlags Flags = ProtoFlags::None);
 
-std::optional<Proto_MainMessage> ProtoDecodeMain(
-    std::span<const std::byte> Data,
-    ProtoFlags Flags = ProtoFlags::None);
-std::optional<Proto_LogMessage> ProtoDecodeLog(
-    std::span<const std::byte> Data,
-    ProtoFlags Flags = ProtoFlags::None);
+std::optional<Proto_MainMessage> ProtoDecodeMain(std::span<const std::byte> Data, ProtoFlags Flags = ProtoFlags::None);
+std::optional<Proto_LogMessage> ProtoDecodeLog(std::span<const std::byte> Data, ProtoFlags Flags = ProtoFlags::None);
 
 // Util
 Proto_MainMessage PbGen_FlightData(const type::FlightData& Data);

@@ -7,6 +7,6 @@
 [submodule "Lib/Bricks"]
 	path = Lib/Bricks
 	url = git@github.com:USSTRocketry/Bricks.git
-[submodule "Lib/Tisdale-proto-files"]
-	path = Lib/Tisdale-proto-files
-	url = git@github.com:USSTRocketry/Tisdale-proto-files.git
+[submodule "Lib/Tisdale"]
+	path = Lib/Tisdale
+	url = git@github.com:USSTRocketry/Tisdale.git
