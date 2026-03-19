@@ -33,9 +33,9 @@ std::vector<std::byte> EncodeLog(uint32_t Timestamp,
 
 std::vector<std::byte> WriteFrame(std::span<const std::byte> Payload)
 {
-    const auto Size = ra::turtleford::ProtoWriteFrame(Payload, {});
+    const auto Size = ra::turtleford::ProtoFrame_Write(Payload, {});
     std::vector<std::byte> Buffer(Size);
-    if (Size > 0) { ra::turtleford::ProtoWriteFrame(Payload, Buffer); }
+    if (Size > 0) { ra::turtleford::ProtoFrame_Write(Payload, Buffer); }
     return Buffer;
 }
 } // namespace
@@ -94,11 +94,11 @@ TEST(ProtoFrameTest, ProtoFrameLogMessageRoundTrip)
     const auto Data   = ra::turtleford::PbGen_DebugMsg(Status, TestStr);
     const auto Framed = EncodeLog(Timestamp, Severity, Category, Data, ra::turtleford::ProtoFlags::Framed);
 
-    const auto Frame = ra::turtleford::ProtoReadFrame(Framed);
+    const auto Frame = ra::turtleford::ProtoFrame_Read(Framed);
     ASSERT_TRUE(Frame.has_value());
     ASSERT_EQ(Frame->BytesConsumed, Framed.size());
 
-    const auto Decode = ra::turtleford::ProtoDecodeLog(Framed, ra::turtleford::ProtoFlags::Framed);
+    const auto Decode = ra::turtleford::ProtoDecode_LogMessage(Framed, ra::turtleford::ProtoFlags::Framed);
     ASSERT_TRUE(Decode.has_value());
 
     auto MsgPtr =
@@ -117,7 +117,7 @@ TEST(ProtoFrameTest, ProtoFrameWrapsExistingEncodedPayload)
     const auto Encoded = EncodeLog(10u, 20u, ra::type::Category::Application, Message);
     const auto Framed  = WriteFrame(Encoded);
 
-    const auto Frame = ra::turtleford::ProtoReadFrame(Framed);
+    const auto Frame = ra::turtleford::ProtoFrame_Read(Framed);
     ASSERT_TRUE(Frame.has_value());
     ASSERT_EQ(Frame->BytesConsumed, Framed.size());
     ASSERT_EQ(Frame->Payload.size(), Encoded.size());
@@ -132,8 +132,8 @@ TEST(ProtoFrameTest, ProtoFrameRejectsTruncatedMessage)
 
     Framed.pop_back();
 
-    ASSERT_FALSE(ra::turtleford::ProtoReadFrame(Framed).has_value());
-    ASSERT_FALSE(ra::turtleford::ProtoDecodeLog(Framed, ra::turtleford::ProtoFlags::Framed).has_value());
+    ASSERT_FALSE(ra::turtleford::ProtoFrame_Read(Framed).has_value());
+    ASSERT_FALSE(ra::turtleford::ProtoDecode_LogMessage(Framed, ra::turtleford::ProtoFlags::Framed).has_value());
 }
 
 TEST(ProtoDecodeTest, ProtoDecodeMainMessage)
@@ -145,7 +145,7 @@ TEST(ProtoDecodeTest, ProtoDecodeMainMessage)
     const auto EncodedData = EncodeMain(Data);
 
     // Decode the message
-    const auto Decode = ra::turtleford::ProtoDecodeMain(EncodedData);
+    const auto Decode = ra::turtleford::ProtoDecode_MainMessage(EncodedData);
     ASSERT_TRUE(Decode.has_value());
     const Proto_MainMessage decoded_msg = Decode.value();
     const auto MsgPtr =
@@ -170,7 +170,7 @@ TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
     const auto EncodedData = EncodeLog(Timestamp, Severity, Category, Data);
 
     // Decode the LogMessage
-    const auto Decode = ra::turtleford::ProtoDecodeLog(EncodedData);
+    const auto Decode = ra::turtleford::ProtoDecode_LogMessage(EncodedData);
     ASSERT_TRUE(Decode.has_value());
     const Proto_LogMessage decoded_log_msg = Decode.value();
 
@@ -190,6 +190,6 @@ TEST(ProtoDecodeTest, ProtoDecodeFailure)
 {
     const auto Buffer = RNG.ByteVector(RNG.Value(0, 255));
 
-    const auto Decode = ra::turtleford::ProtoDecodeMain(Buffer);
+    const auto Decode = ra::turtleford::ProtoDecode_MainMessage(Buffer);
     ASSERT_FALSE(Decode.has_value());
 }

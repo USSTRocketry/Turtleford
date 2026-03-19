@@ -5,12 +5,26 @@
 #include "RadioCmdReciever.h"
 #include <memory>
 #include <vector>
+#include <chrono>
+#include <thread>
 #include "ProtoCodec.h"
+#include "Type.h"
 
 using namespace ra::turtleford;
 using ::testing::_;
 using ::testing::NiceMock;
 using ::testing::Return;
+
+namespace
+{
+std::vector<std::byte> EncodeMessage(const Proto_MainMessage& msg)
+{
+    const auto requiredSize = ProtoEncode(msg, {});
+    std::vector<std::byte> buffer(requiredSize);
+    if (requiredSize > 0) { ProtoEncode(msg, buffer); }
+    return buffer;
+}
+} // namespace
 
 class MockRadio : public HAL::ITelemetryRadio
 {
@@ -65,8 +79,8 @@ TEST(RadioCommandRecieverTest, ReceiveFlightDataCallbackCalled)
     receiver.RecieveData = [&](Proto_InFlightData) { called = true; };
 
     TransferContext context {};
-    const type::FlightData data   = {};
-    std::vector<std::byte> buffer = ProtoEncode(PbGen_FlightData(data));
+    const ra::type::FlightData data = {};
+    std::vector<std::byte> buffer   = EncodeMessage(PbGen_FlightData(data));
 
     receiver.RecieveCommand(context, buffer);
 
@@ -95,7 +109,7 @@ TEST(RadioCommandRecieverTest, DebugMessageCallback)
     receiver.DebugMessage = [&](std::unique_ptr<std::string>) { called = true; };
 
     TransferContext context {};
-    std::vector<std::byte> buffer = ProtoEncode(PbGen_DebugMsg(0, std::string("Hello World")));
+    std::vector<std::byte> buffer = EncodeMessage(PbGen_DebugMsg(0, std::string("Hello World")));
 
     receiver.RecieveCommand(context, buffer);
 
@@ -124,14 +138,14 @@ TEST(RadioCommandRecieverTest, SwitchFrequencyCallback)
     receiver.SwitchRadioFrequency = [&](float freq) { newFreq = freq; };
 
     TransferContext context {};
-    std::vector<std::byte> switchCommand = ProtoEncode(PbGen_SwitchFrequencyMsg(0.0));
+    std::vector<std::byte> switchCommand = EncodeMessage(PbGen_SwitchFrequencyMsg(0.0));
 
     receiver.RecieveCommand(context, switchCommand);
 
     // Work queue should process here
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    std::vector<std::byte> ackSwitch = ProtoEncode(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
+    std::vector<std::byte> ackSwitch = EncodeMessage(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
 
     receiver.RecieveCommand(context, ackSwitch);
 
@@ -160,14 +174,14 @@ TEST(RadioCommandRecieverTest, SwitchFrequencyFail)
     receiver.SwitchRadioFrequency = [&](float freq) { newFreq = freq; };
 
     TransferContext context {};
-    std::vector<std::byte> switchCommand = ProtoEncode(PbGen_SwitchFrequencyMsg(0.0));
+    std::vector<std::byte> switchCommand = EncodeMessage(PbGen_SwitchFrequencyMsg(0.0));
 
     receiver.RecieveCommand(context, switchCommand);
 
     // Work queue should process here
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    std::vector<std::byte> ackSwitch = ProtoEncode(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
+    std::vector<std::byte> ackSwitch = EncodeMessage(PbGen_AckMsg(Proto_MainMessage_switch_radio_frequency_tag));
 
     receiver.RecieveCommand(context, ackSwitch);
 

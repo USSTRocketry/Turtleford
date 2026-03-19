@@ -113,7 +113,7 @@ size_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer
     return PbEncode_Internal(Message, Buffer, HasFlag(Flags, ProtoFlags::Framed) ? PB_ENCODE_DELIMITED : 0u);
 }
 
-size_t ProtoWriteFrame(std::span<const std::byte> Payload, std::span<std::byte> Buffer)
+size_t ProtoFrame_Write(std::span<const std::byte> Payload, std::span<std::byte> Buffer)
 {
     pb_ostream_t Stream = Buffer.empty()
                               ? pb_ostream_t(PB_OSTREAM_SIZING)
@@ -139,17 +139,17 @@ size_t ProtoEncode(uint32_t TimeStamp,
     return PbEncode_Internal(Msg, Buffer, HasFlag(Flags, ProtoFlags::Framed) ? PB_ENCODE_DELIMITED : 0u);
 }
 
-std::optional<Proto_MainMessage> ProtoDecodeMain(std::span<const std::byte> Data, ProtoFlags Flags)
+std::optional<Proto_MainMessage> ProtoDecode_MainMessage(std::span<const std::byte> Data, ProtoFlags Flags)
 {
     return PbDecode_Internal<Proto_MainMessage>(Data, Flags);
 }
 
-std::optional<Proto_LogMessage> ProtoDecodeLog(std::span<const std::byte> Data, ProtoFlags Flags)
+std::optional<Proto_LogMessage> ProtoDecode_LogMessage(std::span<const std::byte> Data, ProtoFlags Flags)
 {
     return PbDecode_Internal<Proto_LogMessage>(Data, Flags);
 }
 
-std::optional<ProtoFrame> ProtoReadFrame(std::span<const std::byte> Data)
+std::optional<ProtoFrame> ProtoFrame_Read(std::span<const std::byte> Data)
 {
     auto Stream = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(Data.data()), Data.size());
 

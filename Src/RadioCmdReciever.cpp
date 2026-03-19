@@ -1,4 +1,7 @@
 #include "Transport/LoraTransport.h"
+
+#include <array>
+
 #include "Transport/TransferSession.h"
 #include "RadioCmdReciever.h"
 #include "ProtoCodec.h"
@@ -164,13 +167,14 @@ RadioCmndReciever::RadioCmndReciever(std::shared_ptr<ITransferSession> session_i
 // send over the radio
 void RadioCmndReciever::SendCmnd(Proto_MainMessage msg)
 {
-    const auto encoded = ProtoEncode(msg);
+    std::array<std::byte, 512> buffer;
+    const auto encoded = ProtoEncode(msg, buffer);
     if (msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag)
     {
         newRadioFrequency = msg.message_type.switch_radio_frequency.new_frequency;
         state             = RadState::WAITING_FOR_ACK;
     }
-    session->Send(encoded);
+    session->Send({buffer.data(), encoded});
 }
 
 } // namespace ra::turtleford

@@ -34,8 +34,8 @@ struct ProtoFrame
 
 namespace ra::turtleford
 {
-size_t ProtoWriteFrame(std::span<const std::byte> Payload, std::span<std::byte> Buffer);
-std::optional<ProtoFrame> ProtoReadFrame(std::span<const std::byte> Data);
+size_t ProtoFrame_Write(std::span<const std::byte> Payload, std::span<std::byte> Buffer);
+std::optional<ProtoFrame> ProtoFrame_Read(std::span<const std::byte> Data);
 
 size_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer, ProtoFlags Flags = ProtoFlags::None);
 size_t ProtoEncode(uint32_t TimeStamp,
@@ -45,8 +45,10 @@ size_t ProtoEncode(uint32_t TimeStamp,
                    std::span<std::byte> Buffer,
                    ProtoFlags Flags = ProtoFlags::None);
 
-std::optional<Proto_MainMessage> ProtoDecodeMain(std::span<const std::byte> Data, ProtoFlags Flags = ProtoFlags::None);
-std::optional<Proto_LogMessage> ProtoDecodeLog(std::span<const std::byte> Data, ProtoFlags Flags = ProtoFlags::None);
+std::optional<Proto_MainMessage> ProtoDecode_MainMessage(std::span<const std::byte> Data,
+                                                         ProtoFlags Flags = ProtoFlags::None);
+std::optional<Proto_LogMessage> ProtoDecode_LogMessage(std::span<const std::byte> Data,
+                                                       ProtoFlags Flags = ProtoFlags::None);
 
 // Util
 Proto_MainMessage PbGen_FlightData(const type::FlightData& Data);

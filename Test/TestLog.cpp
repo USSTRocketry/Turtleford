@@ -42,10 +42,10 @@ protected:
             auto Remaining = std::span<const std::byte>(Chunk.data(), Chunk.size());
             while (!Remaining.empty())
             {
-                const auto Frame = ra::turtleford::ProtoReadFrame(Remaining);
+                const auto Frame = ra::turtleford::ProtoFrame_Read(Remaining);
                 if (!Frame.has_value()) { break; }
 
-                const auto Decoded = ra::turtleford::ProtoDecodeLog(Frame->Payload);
+                const auto Decoded = ra::turtleford::ProtoDecode_LogMessage(Frame->Payload);
                 if (Decoded && Decoded->time_stamp == Timestamp) { return Decoded; }
 
                 Remaining = Remaining.subspan(Frame->BytesConsumed);
