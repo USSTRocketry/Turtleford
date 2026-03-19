@@ -5,9 +5,9 @@ find_package(Nanopb REQUIRED)
 list(APPEND NANOPB_OPTIONS --source-extension=.cpp --cpp-descriptors)
 string(REPLACE ";" " " NANOPB_OPTIONS "${NANOPB_OPTIONS}")
 
-nanopb_generate_cpp(TARGET proto RELPATH Tisdale-proto-files
-  Tisdale-proto-files/ProtoMain.proto
-  Tisdale-proto-files/RocketGroundCommunication.proto
+nanopb_generate_cpp(TARGET proto RELPATH Tisdale
+  Tisdale/ProtoMain.proto
+  Tisdale/RocketGroundCommunication.proto
 )
 target_compile_definitions(proto
  PRIVATE
@@ -21,8 +21,8 @@ target_include_directories(proto
 # =================== LIB dependencies ======================
 target_link_libraries(${PROJECT_NAME} PRIVATE proto)
 
-add_subdirectory(Bricks)
-target_link_libraries(${PROJECT_NAME} PRIVATE Bricks)
+add_subdirectory(Carrot-River)
+target_link_libraries(${PROJECT_NAME} PRIVATE Carrot-River)
 
 # Hardcode HAL platform for this repo
 set(USST_PLATFORM "MOCK" CACHE STRING "Hard coding HAL")
@@ -35,5 +35,5 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
   add_library(LibDependency INTERFACE)
 
   # Add link dependencies for anything linking LibDependency
-  target_link_libraries(LibDependency INTERFACE proto Bricks HAL)
+  target_link_libraries(LibDependency INTERFACE proto Carrot-River HAL)
 endif()

@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace ra::turtleford::type
+namespace ra::type
 {
 template <typename T>
 struct Vector3
@@ -21,7 +21,7 @@ struct FlightData
         float Altitude;
     };
 
-    uint32_t TimestampMs;
+    uint32_t Timestamp;
     BMP_Info BMP_Data;
     float AccelGyroTemperature;
     Vector3f Accel;
@@ -30,10 +30,17 @@ struct FlightData
     float Thermometer;
 };
 
-enum class DataType
+enum class Category : uint32_t
 {
-    Invalid,
-    FlightData,
-    FlightBegin,
+    // NOTE: These values are serialized into log history.
+    // Never change or reorder existing entries.
+    Unknown        = 0,
+    Communications = 1,
+    Application    = 2,
+    Platform       = 3,
+    FlightControl  = 4,
+    Sensors        = 5,
+    Storage        = 6,
+    Tasking        = 7,
 };
-} // namespace ra::turtleford::type
+} // namespace ra::type

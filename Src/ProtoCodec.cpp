@@ -1,6 +1,9 @@
 #include "ProtoCodec.h"
 #include "RocketGroundCommunication.pb.h"
+
+#include <limits>
 #include <memory>
+#include <type_traits>
 
 // Utils / callbacks
 namespace
@@ -13,16 +16,19 @@ namespace
  * @return : Number of bytes written or required. Returns 0 on encoding failure.
  */
 template <typename T>
-size_t PbEncode_Internal(const T& Msg, std::span<std::byte> Buffer)
+size_t PbEncode_Internal(const T& Msg, std::span<std::byte> Buffer, unsigned int Flags = 0)
 {
     pb_ostream_t Stream = Buffer.empty()
                               ? pb_ostream_t(PB_OSTREAM_SIZING)
                               : pb_ostream_from_buffer(reinterpret_cast<pb_byte_t*>(Buffer.data()), Buffer.size());
 
-    if (!pb_encode(&Stream, nanopb::MessageDescriptor<T>::fields(), &Msg)) { return 0; }
+    const bool Encoded = Flags == 0 ? pb_encode(&Stream, nanopb::MessageDescriptor<T>::fields(), &Msg)
+                                    : pb_encode_ex(&Stream, nanopb::MessageDescriptor<T>::fields(), &Msg, Flags);
+    if (!Encoded) { return 0; }
 
     return Stream.bytes_written;
 }
+
 bool PbDecode_Proto_MainMessage(pb_istream_t* Stream, const pb_field_t* Field, void** Arg)
 {
     switch (Field->tag)
@@ -56,73 +62,122 @@ bool PbDecode_Proto_MainMessage(pb_istream_t* Stream, const pb_field_t* Field, v
 
 namespace ra::turtleford
 {
-size_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer)
+constexpr ProtoFlags operator|(ProtoFlags Left, ProtoFlags Right)
 {
-    return PbEncode_Internal(Message, Buffer);
+    return static_cast<ProtoFlags>(static_cast<uint8_t>(Left) | static_cast<uint8_t>(Right));
 }
+
+constexpr ProtoFlags operator&(ProtoFlags Left, ProtoFlags Right)
+{
+    return static_cast<ProtoFlags>(static_cast<uint8_t>(Left) & static_cast<uint8_t>(Right));
+}
+
+constexpr ProtoFlags& operator|=(ProtoFlags& Left, ProtoFlags Right)
+{
+    Left = Left | Right;
+    return Left;
+}
+
+namespace
+{
+constexpr bool HasFlag(ProtoFlags Value, ProtoFlags Flag) { return (Value & Flag) != ProtoFlags::None; }
+
+template <typename T>
+std::optional<T> PbDecode_Internal(std::span<const std::byte> Data, ProtoFlags Flags)
+{
+    T Msg;
+
+    if constexpr (std::is_same_v<T, Proto_MainMessage>)
+    {
+        Msg.cb_message_type.funcs.decode = PbDecode_Proto_MainMessage;
+    }
+    else if constexpr (std::is_same_v<T, Proto_LogMessage>)
+    {
+        Msg.main_message.cb_message_type.funcs.decode = PbDecode_Proto_MainMessage;
+    }
+
+    auto Stream = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(Data.data()), Data.size());
+    const bool Decoded =
+        HasFlag(Flags, ProtoFlags::Framed)
+            ? pb_decode_ex(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg, PB_DECODE_DELIMITED)
+            : pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg);
+    if (!Decoded) { return std::nullopt; }
+    if (HasFlag(Flags, ProtoFlags::Framed) && Stream.bytes_left != 0) { return std::nullopt; }
+
+    return Msg;
+}
+} // namespace
+
+size_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer, ProtoFlags Flags)
+{
+    return PbEncode_Internal(Message, Buffer, HasFlag(Flags, ProtoFlags::Framed) ? PB_ENCODE_DELIMITED : 0u);
+}
+
+size_t ProtoWriteFrame(std::span<const std::byte> Payload, std::span<std::byte> Buffer)
+{
+    pb_ostream_t Stream = Buffer.empty()
+                              ? pb_ostream_t(PB_OSTREAM_SIZING)
+                              : pb_ostream_from_buffer(reinterpret_cast<pb_byte_t*>(Buffer.data()), Buffer.size());
+
+    if (!pb_encode_varint(&Stream, Payload.size_bytes())) { return 0; }
+    if (!pb_write(&Stream, reinterpret_cast<const pb_byte_t*>(Payload.data()), Payload.size_bytes())) { return 0; }
+
+    return Stream.bytes_written;
+}
+
 size_t ProtoEncode(uint32_t TimeStamp,
                    uint32_t Severity,
-                   uint32_t Location,
+                   type::Category Category,
                    const Proto_MainMessage& Message,
-                   std::span<std::byte> Buffer)
+                   std::span<std::byte> Buffer,
+                   ProtoFlags Flags)
 {
-    const Proto_LogMessage Msg {
-        .time_stamp = TimeStamp, .severity = Severity, .location = Location, .main_message = Message};
-    return PbEncode_Internal(Msg, Buffer);
+    const Proto_LogMessage Msg {.time_stamp   = TimeStamp,
+                                .severity     = Severity,
+                                .category     = static_cast<Proto_Category>(Category),
+                                .main_message = Message};
+    return PbEncode_Internal(Msg, Buffer, HasFlag(Flags, ProtoFlags::Framed) ? PB_ENCODE_DELIMITED : 0u);
 }
 
-std::optional<Proto_MainMessage> ProtoDecode_MainMessage(std::span<const std::byte> Data)
+std::optional<Proto_MainMessage> ProtoDecodeMain(std::span<const std::byte> Data, ProtoFlags Flags)
 {
-    Proto_MainMessage Msg;
-    Msg.cb_message_type.funcs.decode = PbDecode_Proto_MainMessage;
+    return PbDecode_Internal<Proto_MainMessage>(Data, Flags);
+}
 
+std::optional<Proto_LogMessage> ProtoDecodeLog(std::span<const std::byte> Data, ProtoFlags Flags)
+{
+    return PbDecode_Internal<Proto_LogMessage>(Data, Flags);
+}
+
+std::optional<ProtoFrame> ProtoReadFrame(std::span<const std::byte> Data)
+{
     auto Stream = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(Data.data()), Data.size());
-    if (!pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg)) { return std::nullopt; }
 
-    return Msg;
-}
+    uint64_t PayloadSize = 0;
+    if (!pb_decode_varint(&Stream, &PayloadSize) || PayloadSize > std::numeric_limits<size_t>::max())
+    {
+        return std::nullopt;
+    }
 
-std::optional<Proto_LogMessage> ProtoDecode_LogMessage(std::span<const std::byte> Data)
-{
-    Proto_LogMessage Msg;
-    Msg.main_message.cb_message_type.funcs.decode = PbDecode_Proto_MainMessage;
+    const auto HeaderSize   = Data.size() - Stream.bytes_left;
+    const auto PayloadBytes = static_cast<size_t>(PayloadSize);
+    if (Data.size() < HeaderSize + PayloadBytes) { return std::nullopt; }
 
-    auto Stream = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(Data.data()), Data.size());
-    if (!pb_decode(&Stream, nanopb::MessageDescriptor<decltype(Msg)>::fields(), &Msg)) { return std::nullopt; }
-
-    return Msg;
-}
-
-// Util
-std::vector<std::byte> ProtoEncode(const Proto_MainMessage& MainMsg)
-{
-    const auto Size = ProtoEncode(MainMsg, {});
-    std::vector<std::byte> Buffer {Size};
-    ProtoEncode(MainMsg, Buffer);
-
-    return Buffer;
-}
-std::vector<std::byte>
-    ProtoEncode(uint32_t TimeStamp, uint32_t Severity, uint32_t Location, const Proto_MainMessage& MainMsg)
-{
-    const auto Size = ProtoEncode(TimeStamp, Severity, Location, MainMsg, {});
-    std::vector<std::byte> Buffer {Size};
-    ProtoEncode(TimeStamp, Severity, Location, MainMsg, Buffer);
-
-    return Buffer;
+    return ProtoFrame {.Payload = Data.subspan(HeaderSize, PayloadBytes), .BytesConsumed = HeaderSize + PayloadBytes};
 }
 
 Proto_MainMessage PbGen_FlightData(const type::FlightData& Data)
 {
     const Proto_InFlightData FD = {
-        .timestamp_ms           = Data.TimestampMs,
+        .has_control            = true,
+        .control                = {.timestamp = Data.Timestamp},
         .bmp_data               = {.temperature = Data.BMP_Data.Temperature,
                                    .pressure    = Data.BMP_Data.Pressure,
-                                   .altitude    = Data.BMP_Data.Altitude                                                       },
+                                   .altitude    = Data.BMP_Data.Altitude},
         .accel_gyro_temperature = Data.AccelGyroTemperature,
-        .accel                  = {                       .X = Data.Accel.X,        .Y = Data.Accel.Y,        .Z = Data.Accel.Z},
-        .gyro                   = {                        .X = Data.Gyro.X,         .Y = Data.Gyro.Y,         .Z = Data.Gyro.Z},
-        .magnetometer           = {                .X = Data.Magnetometer.X, .Y = Data.Magnetometer.Y, .Z = Data.Magnetometer.Z},
+        .accel                  = {.X = Data.Accel.X, .Y = Data.Accel.Y, .Z = Data.Accel.Z},
+        .gyro                   = {.X = Data.Gyro.X, .Y = Data.Gyro.Y, .Z = Data.Gyro.Z},
+        .magnetometer           = {.X = Data.Magnetometer.X, .Y = Data.Magnetometer.Y, .Z = Data.Magnetometer.Z},
         .thermometer            = Data.Thermometer
     };
 
