@@ -21,8 +21,8 @@ target_include_directories(proto
 # =================== LIB dependencies ======================
 target_link_libraries(${PROJECT_NAME} PRIVATE proto)
 
-add_subdirectory(Bricks)
-target_link_libraries(${PROJECT_NAME} PRIVATE Bricks)
+add_subdirectory(Carrot-River)
+target_link_libraries(${PROJECT_NAME} PRIVATE Carrot-River)
 
 # Hardcode HAL platform for this repo
 set(USST_PLATFORM "MOCK" CACHE STRING "Hard coding HAL")
@@ -35,5 +35,5 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
   add_library(LibDependency INTERFACE)
 
   # Add link dependencies for anything linking LibDependency
-  target_link_libraries(LibDependency INTERFACE proto Bricks HAL)
+  target_link_libraries(LibDependency INTERFACE proto Carrot-River HAL)
 endif()

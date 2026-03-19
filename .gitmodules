@@ -4,9 +4,9 @@
 [submodule "Lib/HAL"]
 	path = Lib/HAL
 	url = git@github.com:USSTRocketry/HAL.git
-[submodule "Lib/Bricks"]
-	path = Lib/Bricks
-	url = git@github.com:USSTRocketry/Bricks.git
 [submodule "Lib/Tisdale"]
 	path = Lib/Tisdale
 	url = git@github.com:USSTRocketry/Tisdale.git
+[submodule "Lib/Carrot-River"]
+	path = Lib/Carrot-River
+	url = git@github.com:USSTRocketry/Carrot-River.git

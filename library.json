@@ -32,12 +32,12 @@
       "version": "https://github.com/USSTRocketry/HAL.git"
     },
     {
-      "name": "Bricks",
-      "version": "https://github.com/USSTRocketry/Bricks.git"
+      "name": "Carrot-River",
+      "version": "https://github.com/USSTRocketry/Carrot-River.git"
     },
     {
-      "name": "Tisdale-proto-files",
-      "version": "https://github.com/USSTRocketry/Tisdale-proto-files.git"
+      "name": "Tisdale",
+      "version": "https://github.com/USSTRocketry/Tisdale.git"
     }
   ],
   "export": {
