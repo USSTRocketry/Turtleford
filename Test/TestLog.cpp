@@ -46,7 +46,7 @@ protected:
                 if (!Frame.has_value()) { break; }
 
                 const auto Decoded = ra::turtleford::ProtoDecode_LogMessage(Frame->Payload);
-                if (Decoded && Decoded->time_stamp == Timestamp) { return Decoded; }
+                if (Decoded && Decoded->main_message.timestamp == Timestamp) { return Decoded; }
 
                 Remaining = Remaining.subspan(Frame->BytesConsumed);
             }
@@ -257,7 +257,6 @@ TEST_F(LoggerTest, LogFlightDataEncodesCorrectly)
     };
 
     ra::type::FlightData Data {};
-    Data.Timestamp            = 42u;
     Data.BMP_Data             = {1.1f, 2.2f, 3.3f};
     Data.AccelGyroTemperature = 4.4f;
     Data.Accel                = {.X = 5.5f, .Y = 6.6f, .Z = 7.7f};
@@ -274,8 +273,9 @@ TEST_F(LoggerTest, LogFlightDataEncodesCorrectly)
     EXPECT_EQ(Decoded->severity, static_cast<uint32_t>(ra::Logger::Severity::Info));
     EXPECT_EQ(Decoded->category, static_cast<uint32_t>(CategoryVal));
     const auto& Fd = Decoded->main_message.message_type.in_flight_data;
-    EXPECT_TRUE(Fd.has_control);
-    EXPECT_EQ(Fd.control.timestamp, Data.Timestamp);
+#if defined(Proto_InFlightData_control_tag)
+    EXPECT_FALSE(Fd.has_control);
+#endif
     EXPECT_FLOAT_EQ(Fd.bmp_data.temperature, Data.BMP_Data.Temperature);
     EXPECT_FLOAT_EQ(Fd.bmp_data.pressure, Data.BMP_Data.Pressure);
     EXPECT_FLOAT_EQ(Fd.bmp_data.altitude, Data.BMP_Data.Altitude);
@@ -290,6 +290,48 @@ TEST_F(LoggerTest, LogFlightDataEncodesCorrectly)
     EXPECT_FLOAT_EQ(Fd.magnetometer.Y, Data.Magnetometer.Y);
     EXPECT_FLOAT_EQ(Fd.magnetometer.Z, Data.Magnetometer.Z);
     EXPECT_FLOAT_EQ(Fd.thermometer, Data.Thermometer);
+}
+
+TEST_F(LoggerTest, LogFlightStateEncodesControlWithState)
+{
+    const uint32_t Timestamp = 901u;
+    ra::Logger::LogInfo Info {
+        .Timestamp = Timestamp,
+        .Level     = ra::Logger::Severity::Info,
+        .Category  = ra::type::Category::FlightControl,
+    };
+
+    const ra::type::FlightControlMsg StateData {.State = ra::type::FlightState::InFlight};
+
+    EXPECT_TRUE(m_Logger.Log(Info, StateData));
+    EXPECT_TRUE(ForceFlush());
+
+    const auto Decoded = FindDecodedMessageByTimestamp(Timestamp);
+    ASSERT_TRUE(Decoded.has_value());
+    EXPECT_EQ(Decoded->main_message.which_message_type, Proto_MainMessage_control_tag);
+    EXPECT_TRUE(Decoded->main_message.message_type.control.has_state);
+    EXPECT_EQ(Decoded->main_message.message_type.control.state,
+              static_cast<Proto_FlightState>(*StateData.State));
+}
+
+TEST_F(LoggerTest, LogFlightStateWithoutStateEncodesControlUnset)
+{
+    const uint32_t Timestamp = 902u;
+    ra::Logger::LogInfo Info {
+        .Timestamp = Timestamp,
+        .Level     = ra::Logger::Severity::Warn,
+        .Category  = ra::type::Category::FlightControl,
+    };
+
+    const ra::type::FlightControlMsg StateData {.State = std::nullopt};
+
+    EXPECT_TRUE(m_Logger.Log(Info, StateData));
+    EXPECT_TRUE(ForceFlush());
+
+    const auto Decoded = FindDecodedMessageByTimestamp(Timestamp);
+    ASSERT_TRUE(Decoded.has_value());
+    EXPECT_EQ(Decoded->main_message.which_message_type, Proto_MainMessage_control_tag);
+    EXPECT_FALSE(Decoded->main_message.message_type.control.has_state);
 }
 
 TEST_F(LoggerTest, LogInfoSeverityRoundTripAllLevels)

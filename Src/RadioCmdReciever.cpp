@@ -168,7 +168,7 @@ RadioCmndReciever::RadioCmndReciever(std::shared_ptr<ITransferSession> session_i
 void RadioCmndReciever::SendCmnd(Proto_MainMessage msg)
 {
     std::array<std::byte, 512> buffer;
-    const auto encoded = ProtoEncode(msg, buffer);
+    const auto encoded = ProtoEncode(0u, msg, buffer);
     if (msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag)
     {
         newRadioFrequency = msg.message_type.switch_radio_frequency.new_frequency;

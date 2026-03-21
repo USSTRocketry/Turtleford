@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 
 namespace ra::type
 {
@@ -21,13 +22,26 @@ struct FlightData
         float Altitude;
     };
 
-    uint32_t Timestamp;
     BMP_Info BMP_Data;
     float AccelGyroTemperature;
     Vector3f Accel;
     Vector3f Gyro;
     Vector3f Magnetometer;
     float Thermometer;
+};
+
+enum class FlightState : uint32_t
+{
+    Unknown    = 0,
+    Unarmed    = 1,
+    GroundIdle = 2,
+    InFlight   = 3,
+    MainChute  = 4,
+};
+
+struct FlightControlMsg
+{
+    std::optional<FlightState> State;
 };
 
 enum class Category : uint32_t

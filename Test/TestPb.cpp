@@ -11,11 +11,12 @@ auto& RNG = ra::RNG::Instance();
 namespace
 {
 std::vector<std::byte> EncodeMain(const Proto_MainMessage& Message,
+                                  uint32_t TimeStamp = 0u,
                                   ra::turtleford::ProtoFlags Flags = ra::turtleford::ProtoFlags::None)
 {
-    const auto Size = ra::turtleford::ProtoEncode(Message, {}, Flags);
+    const auto Size = ra::turtleford::ProtoEncode(TimeStamp, Message, {}, Flags);
     std::vector<std::byte> Buffer(Size);
-    if (Size > 0) { ra::turtleford::ProtoEncode(Message, Buffer, Flags); }
+    if (Size > 0) { ra::turtleford::ProtoEncode(TimeStamp, Message, Buffer, Flags); }
     return Buffer;
 }
 
@@ -58,11 +59,11 @@ TEST(ProtoEncodeTest, ProtoEncodeSingleBufferSmall)
     std::string TestStr = RNG.String(RNG.Value<uint8_t>());
 
     const auto Data           = ra::turtleford::PbGen_DebugMsg(Status, TestStr);
-    const auto RequiredLength = ra::turtleford::ProtoEncode(Data, {});
+    const auto RequiredLength = ra::turtleford::ProtoEncode(0u, Data, {});
 
     std::array<std::byte, 1> Buffer;
     // Encode the message
-    const auto BytesWritten = ra::turtleford::ProtoEncode(Data, Buffer);
+    const auto BytesWritten = ra::turtleford::ProtoEncode(0u, Data, Buffer);
 
     // Check if the function wrote the exact bytes
     ASSERT_GT(RequiredLength, 0);
@@ -104,7 +105,7 @@ TEST(ProtoFrameTest, ProtoFrameLogMessageRoundTrip)
     auto MsgPtr =
         std::unique_ptr<std::string>(static_cast<std::string*>(Decode->main_message.message_type.debug_msg.msg.arg));
 
-    ASSERT_EQ(Decode->time_stamp, Timestamp);
+    ASSERT_EQ(Decode->main_message.timestamp, Timestamp);
     ASSERT_EQ(Decode->severity, Severity);
     ASSERT_EQ(Decode->category, static_cast<uint32_t>(Category));
     ASSERT_EQ(Decode->main_message.message_type.debug_msg.status, Status);
@@ -178,7 +179,7 @@ TEST(ProtoDecodeTest, ProtoDecodeLogMessage)
         static_cast<std::string*>(decoded_log_msg.main_message.message_type.debug_msg.msg.arg));
 
     // Verify if the LogMessage is correctly decoded
-    ASSERT_EQ(decoded_log_msg.time_stamp, Timestamp);
+    ASSERT_EQ(decoded_log_msg.main_message.timestamp, Timestamp);
     ASSERT_EQ(decoded_log_msg.severity, Severity);
     ASSERT_EQ(decoded_log_msg.category, static_cast<uint32_t>(Category));
     ASSERT_EQ(decoded_log_msg.main_message.which_message_type, Proto_MainMessage_debug_msg_tag);

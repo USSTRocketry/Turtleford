@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 // currently no support for format
 // #include <format>
@@ -56,6 +57,23 @@ public:
                                                      static_cast<uint32_t>(Info.Level),
                                                      Info.Category,
                                                      FlightData,
+                                                     StaticBuffer,
+                                                     turtleford::ProtoFlags::Framed);
+
+        if (Written == 0) { return false; }
+
+        return Log(std::span<const std::byte>(StaticBuffer.data(), Written));
+    }
+
+    bool Log(const LogInfo& Info, const ra::type::FlightControlMsg& Data)
+    {
+        static thread_local std::array<std::byte, BufferSize> StaticBuffer;
+
+        const auto Control = turtleford::PbGen_FlightState(Data);
+        const auto Written = turtleford::ProtoEncode(Info.Timestamp,
+                                                     static_cast<uint32_t>(Info.Level),
+                                                     Info.Category,
+                                                     Control,
                                                      StaticBuffer,
                                                      turtleford::ProtoFlags::Framed);
 

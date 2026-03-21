@@ -19,9 +19,9 @@ namespace
 {
 std::vector<std::byte> EncodeMessage(const Proto_MainMessage& msg)
 {
-    const auto requiredSize = ProtoEncode(msg, {});
+    const auto requiredSize = ProtoEncode(0u, msg, {});
     std::vector<std::byte> buffer(requiredSize);
-    if (requiredSize > 0) { ProtoEncode(msg, buffer); }
+    if (requiredSize > 0) { ProtoEncode(0u, msg, buffer); }
     return buffer;
 }
 } // namespace

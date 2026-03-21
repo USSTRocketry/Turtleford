@@ -37,11 +37,14 @@ namespace ra::turtleford
 size_t ProtoFrame_Write(std::span<const std::byte> Payload, std::span<std::byte> Buffer);
 std::optional<ProtoFrame> ProtoFrame_Read(std::span<const std::byte> Data);
 
-size_t ProtoEncode(const Proto_MainMessage& Message, std::span<std::byte> Buffer, ProtoFlags Flags = ProtoFlags::None);
+size_t ProtoEncode(uint32_t TimeStamp,
+                   Proto_MainMessage Message,
+                   std::span<std::byte> Buffer,
+                   ProtoFlags Flags = ProtoFlags::None);
 size_t ProtoEncode(uint32_t TimeStamp,
                    uint32_t Severity,
                    type::Category Category,
-                   const Proto_MainMessage& Message,
+                   Proto_MainMessage Message,
                    std::span<std::byte> Buffer,
                    ProtoFlags Flags = ProtoFlags::None);
 
@@ -52,6 +55,7 @@ std::optional<Proto_LogMessage> ProtoDecode_LogMessage(std::span<const std::byte
 
 // Util
 Proto_MainMessage PbGen_FlightData(const type::FlightData& Data);
+Proto_MainMessage PbGen_FlightState(const type::FlightControlMsg& Data);
 // WARNING : Underlying Str must live until after Encode
 Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string& Str);
 
