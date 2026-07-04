@@ -38,13 +38,13 @@ size_t ProtoFrame_Write(std::span<const std::byte> Payload, std::span<std::byte>
 std::optional<ProtoFrame> ProtoFrame_Read(std::span<const std::byte> Data);
 
 size_t ProtoEncode(uint32_t TimeStamp,
-                   Proto_MainMessage Message,
+                   const Proto_MainMessage& Message,
                    std::span<std::byte> Buffer,
                    ProtoFlags Flags = ProtoFlags::None);
 size_t ProtoEncode(uint32_t TimeStamp,
                    uint32_t Severity,
                    type::Category Category,
-                   Proto_MainMessage Message,
+                   const Proto_MainMessage& Message,
                    std::span<std::byte> Buffer,
                    ProtoFlags Flags = ProtoFlags::None);
 

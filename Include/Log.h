@@ -50,7 +50,7 @@ public:
     // TODO : Separate package logic (to proto) from storing logic (writing to storage)
     bool Log(const LogInfo& Info, const ra::type::FlightData& Data)
     {
-        static thread_local std::array<std::byte, BufferSize> StaticBuffer;
+        static std::array<std::byte, BufferSize> StaticBuffer;
 
         const auto FlightData = turtleford::PbGen_FlightData(Data);
         const auto Written    = turtleford::ProtoEncode(Info.Timestamp,
@@ -67,7 +67,7 @@ public:
 
     bool Log(const LogInfo& Info, const ra::type::FlightControlMsg& Data)
     {
-        static thread_local std::array<std::byte, BufferSize> StaticBuffer;
+        static std::array<std::byte, BufferSize> StaticBuffer;
 
         const auto Control = turtleford::PbGen_FlightState(Data);
         const auto Written = turtleford::ProtoEncode(Info.Timestamp,
@@ -84,7 +84,7 @@ public:
 
     bool Log(const LogInfo& Info, uint32_t Status, const std::string& Msg)
     {
-        static thread_local std::array<std::byte, BufferSize> StaticBuffer;
+        static std::array<std::byte, BufferSize> StaticBuffer;
 
         const auto DebugMsg = turtleford::PbGen_DebugMsg(Status, Msg);
         const auto Written  = turtleford::ProtoEncode(Info.Timestamp,
@@ -107,6 +107,7 @@ public:
     }
 
     void RegisterCallback(StorageWriter Cb, void* Ctx) { m_Buffer.RegisterCallback(Cb, Ctx); }
+    void Flush() { m_Buffer.Flush(); }
 
 private:
     Logger() {}
