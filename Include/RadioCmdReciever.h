@@ -23,6 +23,8 @@ public:
 
     std::function<void(Proto_InfoExchange)> InfoExchange;
 
+    std::function<void(Proto_CommandMessage)> RecieveCommandMsg;
+
     void SendCmnd(Proto_MainMessage msg);
 
     void SetWorkQueue(hal::WorkQueue* work_queue);

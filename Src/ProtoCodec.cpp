@@ -265,4 +265,17 @@ Proto_MainMessage PbGen_AckMsg(uint32_t ack_to)
     return Message;
 }
 
+Proto_MainMessage PbGen_CommandMsg(type::CommandType Command)
+{
+    const Proto_CommandMessage CM = {
+        .command = static_cast<Proto_CommandType>(Command),
+    };
+
+    Proto_MainMessage Message;
+    std::memset(&Message, 0, sizeof(Message));
+    Message.which_message_type = Proto_MainMessage_command_msg_tag;
+    Message.message_type.command_msg = CM;
+    return Message;
+}
+
 } // namespace ra::turtleford

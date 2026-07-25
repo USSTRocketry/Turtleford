@@ -57,4 +57,19 @@ enum class Category : uint32_t
     Storage        = 6,
     Tasking        = 7,
 };
+
+enum class CommandType : uint32_t
+{
+    Unknown        = 0,
+    Abort          = 1,
+    CameraOn       = 2,
+    CameraOff      = 3,
+    StartRecording = 4,
+    StopRecording  = 5,
+};
+
+struct CommandMsg
+{
+    CommandType Command;
+};
 } // namespace ra::type
