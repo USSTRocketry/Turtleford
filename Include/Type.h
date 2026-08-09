@@ -78,6 +78,8 @@ enum class CommandType : uint32_t
     CameraOff      = 3,
     StartRecording = 4,
     StopRecording  = 5,
+    SdLogOn        = 6,
+    SdLogOff       = 7,
 };
 
 struct CommandMsg
