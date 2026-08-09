@@ -63,6 +63,9 @@ void RadioCmndReciever::ThreadRun(Proto_MainMessage Msg)
         case Proto_MainMessage_info_exchange_tag:
             if (InfoExchange != nullptr) { InfoExchange(Msg.message_type.info_exchange); }
             break;
+        case Proto_MainMessage_command_msg_tag:
+            if (RecieveCommandMsg != nullptr) { RecieveCommandMsg(Msg.message_type.command_msg); }
+            break;
         default:
             break;
     }

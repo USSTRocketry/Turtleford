@@ -12,6 +12,15 @@ struct Vector3
     T Z;
 };
 
+enum class FlightState : uint32_t
+{
+    Unknown    = 0,
+    Unarmed    = 1,
+    GroundIdle = 2,
+    InFlight   = 3,
+    MainChute  = 4,
+};
+
 struct FlightData
 {
     using Vector3f = Vector3<float>;
@@ -21,6 +30,16 @@ struct FlightData
         float Pressure;
         float Altitude;
     };
+    struct GPS_Info
+    {
+        float Latitude;
+        float Longitude;
+        float Altitude;
+        float Speed;
+        float Angle;
+        uint32_t FixQuality;
+        uint32_t Satellites;
+    };
 
     BMP_Info BMP_Data;
     float AccelGyroTemperature;
@@ -28,15 +47,8 @@ struct FlightData
     Vector3f Gyro;
     Vector3f Magnetometer;
     float Thermometer;
-};
-
-enum class FlightState : uint32_t
-{
-    Unknown    = 0,
-    Unarmed    = 1,
-    GroundIdle = 2,
-    InFlight   = 3,
-    MainChute  = 4,
+    FlightState State;
+    GPS_Info GPS_Data;
 };
 
 struct FlightControlMsg
@@ -56,5 +68,22 @@ enum class Category : uint32_t
     Sensors        = 5,
     Storage        = 6,
     Tasking        = 7,
+};
+
+enum class CommandType : uint32_t
+{
+    Unknown        = 0,
+    Abort          = 1,
+    CameraOn       = 2,
+    CameraOff      = 3,
+    StartRecording = 4,
+    StopRecording  = 5,
+    SdLogOn        = 6,
+    SdLogOff       = 7,
+};
+
+struct CommandMsg
+{
+    CommandType Command;
 };
 } // namespace ra::type

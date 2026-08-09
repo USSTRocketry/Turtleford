@@ -198,6 +198,14 @@ Proto_MainMessage PbGen_FlightData(const type::FlightData& Data)
         .gyro                   = {.X = Data.Gyro.X, .Y = Data.Gyro.Y, .Z = Data.Gyro.Z},
         .magnetometer           = {.X = Data.Magnetometer.X, .Y = Data.Magnetometer.Y, .Z = Data.Magnetometer.Z},
         .thermometer            = Data.Thermometer,
+        .flight_state           = ToProtoFlightState(Data.State),
+        .gps_data               = {.latitude    = Data.GPS_Data.Latitude,
+                                   .longitude   = Data.GPS_Data.Longitude,
+                                   .altitude    = Data.GPS_Data.Altitude,
+                                   .speed       = Data.GPS_Data.Speed,
+                                   .angle       = Data.GPS_Data.Angle,
+                                   .fix_quality = Data.GPS_Data.FixQuality,
+                                   .satellites  = Data.GPS_Data.Satellites},
     };
 
     Proto_MainMessage Message;
@@ -262,6 +270,19 @@ Proto_MainMessage PbGen_AckMsg(uint32_t ack_to)
     std::memset(&Message, 0, sizeof(Message));
     Message.which_message_type = Proto_MainMessage_ack_tag;
     Message.message_type.ack = AM;
+    return Message;
+}
+
+Proto_MainMessage PbGen_CommandMsg(type::CommandType Command)
+{
+    const Proto_CommandMessage CM = {
+        .command = static_cast<Proto_CommandType>(Command),
+    };
+
+    Proto_MainMessage Message;
+    std::memset(&Message, 0, sizeof(Message));
+    Message.which_message_type = Proto_MainMessage_command_msg_tag;
+    Message.message_type.command_msg = CM;
     return Message;
 }
 
