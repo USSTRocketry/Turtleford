@@ -1,0 +1,11 @@
+[project]
+name = "turtleford_build"
+version = "0.1.0"
+description = "turtleford_build"
+readme = "README.md"
+authors = [{ name = "kuang", email = "snowy-shadow@github.com" }]
+requires-python = ">=3.10"
+dependencies = ["grpcio-tools>=1.84.0", "protobuf>=7.36.2"]
+
+[tool.uv]
+package = false

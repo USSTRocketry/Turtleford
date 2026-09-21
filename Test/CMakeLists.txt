@@ -25,7 +25,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 # Link with GoogleTest libraries
-target_link_libraries(${TEST_RUNNER} PRIVATE gtest gtest_main gmock gmock_main ${PROJECT_NAME} LibDependency)
+target_link_libraries(${TEST_RUNNER} PRIVATE gmock_main ${PROJECT_NAME} LibDependency)
 
 # Register tests with CTest
 include(GoogleTest)
