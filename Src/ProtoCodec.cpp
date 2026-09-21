@@ -4,22 +4,16 @@
 #include <limits>
 #include <memory>
 #include <type_traits>
-#include <cstring>
 
 // Utils / callbacks
 namespace
 {
-Proto_FlightState ToProtoFlightState(ra::type::FlightState State)
-{
-    return static_cast<Proto_FlightState>(State);
-}
+Proto_FlightState ToProtoFlightState(ra::type::FlightState State) { return static_cast<Proto_FlightState>(State); }
 
 template <typename T>
-requires requires(T& Message) { Message.timestamp; }
+    requires requires(T& Message) { Message.timestamp; }
 void SetMessageTimestamp(T& Message, uint32_t TimeStamp)
-{
-    Message.timestamp = TimeStamp;
-}
+{ Message.timestamp = TimeStamp; }
 
 /**
  * @brief Encode a protobuf message into a buffer or compute required size.
@@ -76,14 +70,10 @@ bool PbDecode_Proto_MainMessage(pb_istream_t* Stream, const pb_field_t* Field, v
 namespace ra::turtleford
 {
 constexpr ProtoFlags operator|(ProtoFlags Left, ProtoFlags Right)
-{
-    return static_cast<ProtoFlags>(static_cast<uint8_t>(Left) | static_cast<uint8_t>(Right));
-}
+{ return static_cast<ProtoFlags>(static_cast<uint8_t>(Left) | static_cast<uint8_t>(Right)); }
 
 constexpr ProtoFlags operator&(ProtoFlags Left, ProtoFlags Right)
-{
-    return static_cast<ProtoFlags>(static_cast<uint8_t>(Left) & static_cast<uint8_t>(Right));
-}
+{ return static_cast<ProtoFlags>(static_cast<uint8_t>(Left) & static_cast<uint8_t>(Right)); }
 
 constexpr ProtoFlags& operator|=(ProtoFlags& Left, ProtoFlags Right)
 {
@@ -121,14 +111,10 @@ std::optional<T> PbDecode_Internal(std::span<const std::byte> Data, ProtoFlags F
 }
 } // namespace
 
-size_t ProtoEncode(uint32_t TimeStamp,
-                   const Proto_MainMessage& Message,
-                   std::span<std::byte> Buffer,
-                   ProtoFlags Flags)
+size_t ProtoEncode(uint32_t TimeStamp, Proto_MainMessage Message, std::span<std::byte> Buffer, ProtoFlags Flags)
 {
-    Proto_MainMessage MsgCopy = Message;
-    MsgCopy.timestamp = TimeStamp;
-    return PbEncode_Internal(MsgCopy, Buffer, HasFlag(Flags, ProtoFlags::Framed) ? PB_ENCODE_DELIMITED : 0u);
+    SetMessageTimestamp(Message, TimeStamp);
+    return PbEncode_Internal(Message, Buffer, HasFlag(Flags, ProtoFlags::Framed) ? PB_ENCODE_DELIMITED : 0u);
 }
 
 size_t ProtoFrame_Write(std::span<const std::byte> Payload, std::span<std::byte> Buffer)
@@ -146,29 +132,26 @@ size_t ProtoFrame_Write(std::span<const std::byte> Payload, std::span<std::byte>
 size_t ProtoEncode(uint32_t TimeStamp,
                    uint32_t Severity,
                    type::Category Category,
-                   const Proto_MainMessage& Message,
+                   Proto_MainMessage Message,
                    std::span<std::byte> Buffer,
                    ProtoFlags Flags)
 {
-    Proto_LogMessage Msg {
+    SetMessageTimestamp(Message, TimeStamp);
+
+    const Proto_LogMessage Msg {
         .severity     = Severity,
         .category     = static_cast<Proto_Category>(Category),
         .main_message = Message,
     };
-    Msg.main_message.timestamp = TimeStamp;
 
     return PbEncode_Internal(Msg, Buffer, HasFlag(Flags, ProtoFlags::Framed) ? PB_ENCODE_DELIMITED : 0u);
 }
 
 std::optional<Proto_MainMessage> ProtoDecode_MainMessage(std::span<const std::byte> Data, ProtoFlags Flags)
-{
-    return PbDecode_Internal<Proto_MainMessage>(Data, Flags);
-}
+{ return PbDecode_Internal<Proto_MainMessage>(Data, Flags); }
 
 std::optional<Proto_LogMessage> ProtoDecode_LogMessage(std::span<const std::byte> Data, ProtoFlags Flags)
-{
-    return PbDecode_Internal<Proto_LogMessage>(Data, Flags);
-}
+{ return PbDecode_Internal<Proto_LogMessage>(Data, Flags); }
 
 std::optional<ProtoFrame> ProtoFrame_Read(std::span<const std::byte> Data)
 {
@@ -208,10 +191,11 @@ Proto_MainMessage PbGen_FlightData(const type::FlightData& Data)
                                    .satellites  = Data.GPS_Data.Satellites},
     };
 
-    Proto_MainMessage Message;
-    std::memset(&Message, 0, sizeof(Message));
-    Message.which_message_type = Proto_MainMessage_in_flight_data_tag;
-    Message.message_type.in_flight_data = FD;
+    Proto_MainMessage Message {
+        .cb_message_type    = {{nullptr}, nullptr},
+        .which_message_type = Proto_MainMessage_in_flight_data_tag,
+        .message_type       = {.in_flight_data = FD},
+    };
 
     return Message;
 }
@@ -223,19 +207,22 @@ Proto_MainMessage PbGen_FlightState(const type::FlightControlMsg& Data)
         .state     = ToProtoFlightState(Data.State.value_or(type::FlightState::Unknown)),
     };
 
-    Proto_MainMessage Message;
-    std::memset(&Message, 0, sizeof(Message));
-    Message.which_message_type = Proto_MainMessage_control_tag;
-    Message.message_type.control = Control;
+    Proto_MainMessage Message {
+        .cb_message_type    = {{nullptr}, nullptr},
+        .which_message_type = Proto_MainMessage_control_tag,
+        .message_type       = {.control = Control},
+    };
 
     return Message;
 }
 
 Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string& Str)
 {
-    Proto_MainMessage Message;
-    std::memset(&Message, 0, sizeof(Message));
-    Message.which_message_type = Proto_MainMessage_debug_msg_tag;
+    Proto_MainMessage Message {
+        .cb_message_type    = {{nullptr}, nullptr},
+        .which_message_type = Proto_MainMessage_debug_msg_tag,
+        .message_type       = {.debug_msg = {}},
+    };
 
     auto& MsgStr  = Message.message_type.debug_msg;
     MsgStr.status = Status;
@@ -255,10 +242,11 @@ Proto_MainMessage PbGen_SwitchFrequencyMsg(float NewFrequency)
 {
     Proto_SwitchRadioFrequency FQ = {.new_frequency = NewFrequency};
 
-    Proto_MainMessage Message;
-    std::memset(&Message, 0, sizeof(Message));
-    Message.which_message_type = Proto_MainMessage_switch_radio_frequency_tag;
-    Message.message_type.switch_radio_frequency = FQ;
+    Proto_MainMessage Message {
+        .cb_message_type    = {{nullptr}, nullptr},
+        .which_message_type = Proto_MainMessage_switch_radio_frequency_tag,
+        .message_type       = {.switch_radio_frequency = FQ},
+    };
     return Message;
 }
 
@@ -266,10 +254,11 @@ Proto_MainMessage PbGen_AckMsg(uint32_t ack_to)
 {
     Proto_Ack AM = {.response_to_which_message = ack_to};
 
-    Proto_MainMessage Message;
-    std::memset(&Message, 0, sizeof(Message));
-    Message.which_message_type = Proto_MainMessage_ack_tag;
-    Message.message_type.ack = AM;
+    Proto_MainMessage Message {
+        .cb_message_type    = {{nullptr}, nullptr},
+        .which_message_type = Proto_MainMessage_ack_tag,
+        .message_type       = {.ack = AM},
+    };
     return Message;
 }
 
@@ -281,7 +270,7 @@ Proto_MainMessage PbGen_CommandMsg(type::CommandType Command)
 
     Proto_MainMessage Message;
     std::memset(&Message, 0, sizeof(Message));
-    Message.which_message_type = Proto_MainMessage_command_msg_tag;
+    Message.which_message_type       = Proto_MainMessage_command_msg_tag;
     Message.message_type.command_msg = CM;
     return Message;
 }
