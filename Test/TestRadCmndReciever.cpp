@@ -9,11 +9,17 @@
 #include <thread>
 #include "ProtoCodec.h"
 #include "Type.h"
+#include "Random.h"
 
 using namespace ra::turtleford;
 using ::testing::_;
 using ::testing::NiceMock;
 using ::testing::Return;
+
+namespace
+{
+auto& RNG = ra::RNG::Instance();
+}
 
 namespace
 {
@@ -109,7 +115,10 @@ TEST(RadioCommandRecieverTest, DebugMessageCallback)
     receiver.DebugMessage = [&](std::unique_ptr<std::string>) { called = true; };
 
     TransferContext context {};
-    std::vector<std::byte> buffer = EncodeMessage(PbGen_DebugMsg(0, std::string("Hello World")));
+
+    const auto TestString         = RNG.String(RNG.Value<uint8_t>());
+    const auto Message            = ra::turtleford::PbGen_DebugMsg(RNG.Value<uint32_t>(), TestString);
+    std::vector<std::byte> buffer = EncodeMessage(Message);
 
     receiver.RecieveCommand(context, buffer);
 

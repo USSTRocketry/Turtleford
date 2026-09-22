@@ -6,12 +6,15 @@
 #include "ProtoCodec.h"
 #include "Random.h"
 
+namespace
+{
 auto& RNG = ra::RNG::Instance();
+}
 
 namespace
 {
 std::vector<std::byte> EncodeMain(const Proto_MainMessage& Message,
-                                  uint32_t TimeStamp = 0u,
+                                  uint32_t TimeStamp               = 0u,
                                   ra::turtleford::ProtoFlags Flags = ra::turtleford::ProtoFlags::None)
 {
     const auto Size = ra::turtleford::ProtoEncode(TimeStamp, Message, {}, Flags);
@@ -114,9 +117,10 @@ TEST(ProtoFrameTest, ProtoFrameLogMessageRoundTrip)
 
 TEST(ProtoFrameTest, ProtoFrameWrapsExistingEncodedPayload)
 {
-    const auto Message = ra::turtleford::PbGen_DebugMsg(42u, "wrapped");
-    const auto Encoded = EncodeLog(10u, 20u, ra::type::Category::Application, Message);
-    const auto Framed  = WriteFrame(Encoded);
+    const auto TestString = RNG.String(RNG.Value<uint8_t>());
+    const auto Message    = ra::turtleford::PbGen_DebugMsg(RNG.Value<uint32_t>(), TestString);
+    const auto Encoded    = EncodeLog(10u, 20u, ra::type::Category::Application, Message);
+    const auto Framed     = WriteFrame(Encoded);
 
     const auto Frame = ra::turtleford::ProtoFrame_Read(Framed);
     ASSERT_TRUE(Frame.has_value());
@@ -127,8 +131,9 @@ TEST(ProtoFrameTest, ProtoFrameWrapsExistingEncodedPayload)
 
 TEST(ProtoFrameTest, ProtoFrameRejectsTruncatedMessage)
 {
-    const auto Data = ra::turtleford::PbGen_DebugMsg(7u, "frame-test");
-    auto Framed     = EncodeLog(1u, 2u, ra::type::Category::Application, Data, ra::turtleford::ProtoFlags::Framed);
+    const auto TestString = RNG.String(RNG.Value<uint8_t>());
+    const auto Data       = ra::turtleford::PbGen_DebugMsg(RNG.Value<uint32_t>(), TestString);
+    auto Framed = EncodeLog(1u, 2u, ra::type::Category::Application, Data, ra::turtleford::ProtoFlags::Framed);
     ASSERT_GT(Framed.size(), 1u);
 
     Framed.pop_back();

@@ -56,8 +56,9 @@ std::optional<Proto_LogMessage> ProtoDecode_LogMessage(std::span<const std::byte
 // Util
 Proto_MainMessage PbGen_FlightData(const type::FlightData& Data);
 Proto_MainMessage PbGen_FlightState(const type::FlightControlMsg& Data);
-// WARNING : Underlying Str must live until after Encode
+// WARNING : Underlying Str must live until after Encode is called, lvalue only
 Proto_MainMessage PbGen_DebugMsg(uint32_t Status, const std::string& Str);
+Proto_MainMessage PbGen_DebugMsg(uint32_t Status, std::string&&) = delete;
 
 Proto_MainMessage PbGen_SwitchFrequencyMsg(float NewFrequency);
 
