@@ -3,5 +3,5 @@ target_sources(${PROJECT_NAME}
  ProtoCodec.cpp
  LoraTransport.cpp
  RadioCmdReciever.cpp
- TurtlefordMain.cpp
+ Turtleford.cpp
 )

@@ -47,7 +47,6 @@ struct FlightData
     Vector3f Gyro;
     Vector3f Magnetometer;
     float Thermometer;
-    FlightState State;
     GPS_Info GPS_Data;
 };
 
