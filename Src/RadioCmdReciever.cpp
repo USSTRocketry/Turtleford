@@ -159,7 +159,7 @@ void RadioCmndReciever::SetWorkQueue(hal::WorkQueue* work_queue) { WorkQueue = w
 /**
  * initialises the RadioCmndReciever, must have the setWorkQueue function called after the class is initalised
  */
-RadioCmndReciever::RadioCmndReciever(std::shared_ptr<ITransferSession> session_in, float initial_radio_frequency)
+bool RadioCmndReciever::Init(std::shared_ptr<ITransferSession> session_in, float initial_radio_frequency)
 {
     newRadioFrequency = initial_radio_frequency;
     session           = session_in;
@@ -168,16 +168,15 @@ RadioCmndReciever::RadioCmndReciever(std::shared_ptr<ITransferSession> session_i
 }
 
 // send over the radio
-void RadioCmndReciever::SendCmnd(Proto_MainMessage msg)
+void RadioCmndReciever::SendCmnd(const Proto_MainMessage& Msg)
 {
     std::array<std::byte, 512> buffer;
-    const auto encoded = ProtoEncode(0u, msg, buffer);
-    if (msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag)
+    const auto encoded = ProtoEncode(0u, Msg, buffer);
+    if (Msg.which_message_type == Proto_MainMessage_switch_radio_frequency_tag)
     {
-        newRadioFrequency = msg.message_type.switch_radio_frequency.new_frequency;
+        newRadioFrequency = Msg.message_type.switch_radio_frequency.new_frequency;
         state             = RadState::WAITING_FOR_ACK;
     }
     session->Send({buffer.data(), encoded});
 }
-
 } // namespace ra::turtleford

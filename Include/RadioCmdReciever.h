@@ -13,7 +13,7 @@ namespace ra::turtleford
 class RadioCmndReciever
 {
 public:
-    RadioCmndReciever(std::shared_ptr<ITransferSession> session_in, float initial_radio_frequency);
+    bool Init(std::shared_ptr<ITransferSession> session_in, float initial_radio_frequency);
 
     std::function<void(Proto_InFlightData)> RecieveData;
 
@@ -25,7 +25,7 @@ public:
 
     std::function<void(Proto_CommandMessage)> RecieveCommandMsg;
 
-    void SendCmnd(Proto_MainMessage msg);
+    void SendCmnd(const Proto_MainMessage& msg);
 
     void SetWorkQueue(hal::WorkQueue* work_queue);
 

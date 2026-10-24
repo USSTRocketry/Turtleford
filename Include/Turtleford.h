@@ -11,28 +11,30 @@
 
 namespace ra::turtleford
 {
-struct DebugMsg
+
+using LogMsg = std::string_view;
+struct SwitchFrequency
 {
 };
 
-using RadioCommand  = std::variant<DebugMsg, type::FlightData>;
-using RadioCallback = void (*)(RadioCommand);
+using TelemetryOps  = std::variant<LogMsg, type::FlightData, Proto_SwitchRadioFrequency>;
+using RadioCallback = void (*)(TelemetryOps);
 
 class Turtleford
 {
 public:
-    Turtleford(float RadioFrequency);
+    bool Init(float RadioFrequency);
 
-    void SendCmnd(const RadioCommand& Msg);
+    void TelemetryOperation(const TelemetryOps& Msg);
 
 #if !(WORK_QUEUE_PREEMPTIVE)
     void Process();
 #endif
 
 private:
+    std::unique_ptr<LoraTransferManager> TransferManager;
     hal::WorkQueue WorkQueue;
     RadioCmndReciever CommandSenderReciever;
-    std::unique_ptr<LoraTransferManager> TransferManager = std::make_unique<LoraTransferManager>(1, 2);
 };
 
 }; // namespace ra::turtleford
