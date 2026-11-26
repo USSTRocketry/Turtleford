@@ -24,6 +24,9 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   target_compile_options(${TEST_RUNNER} PRIVATE /W4 /Zi /RTC1 /EHsc)
 endif()
 
+# Test helpers are included as "Sim/SimRadio.h", "Mocks/MockTransport.h"
+target_include_directories(${TEST_RUNNER} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # Link with GoogleTest libraries
 target_link_libraries(${TEST_RUNNER} PRIVATE gmock_main ${PROJECT_NAME} LibDependency)
 
@@ -35,7 +38,21 @@ gtest_discover_tests(${TEST_RUNNER})
 target_sources(${TEST_RUNNER} PRIVATE
   TestRunner.cpp
   TestPb.cpp
+  TestFragment.cpp
+  TestSmallRng.cpp
+  TestTurnTaking.cpp
   TestLoraTransport.cpp
+  TestArq.cpp
+  TestLink.cpp
+  TestChannelRequest.cpp
+  TestRadio.cpp
+  TestRadioReliable.cpp
+  TestRadioRouting.cpp
+  TestRadioChannel.cpp
+  TestRadioOverLora.cpp
+  TestSimRadio.cpp
+  TestRadioSoak.cpp
+  TestLoraSoak.cpp
+  TestTurtleford.cpp
   TestLog.cpp
-  TestRadCmndReciever.cpp
 )

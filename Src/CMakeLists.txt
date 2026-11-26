@@ -1,7 +1,11 @@
 target_sources(${PROJECT_NAME}
  PRIVATE
  ProtoCodec.cpp
+ Fragment.cpp
  LoraTransport.cpp
- RadioCmdReciever.cpp
+ TurnTaking.cpp
+ Link.cpp
+ ChannelRequest.cpp
+ Radio.cpp
  Turtleford.cpp
 )

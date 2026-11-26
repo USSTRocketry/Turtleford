@@ -1,191 +1,197 @@
+/**
+ * @file LoraTransport.h
+ * @brief ITransport for a LoRa radio: fragmenting, a transmit queue, and half duplex turn taking.
+ *
+ * LoraTransport sits on HAL::ITelemetryRadio. Messages are cut into frames by Fragmenter and put back
+ * together by Reassembler (Transport/Fragment.h); who may transmit when is decided by TurnTaking
+ * (Transport/TurnTaking.h). LoraTransportConfig holds the settings.
+ */
+
 #pragma once
 
+#include <array>
 #include <cstddef>
-#include <memory>
+#include <cstdint>
 #include <span>
 #include <vector>
-#include <array>
-#include <algorithm>
-#include <limits>
 
-#include "TransferSession.h"
-#include "DataStructure/Buffer/CircularBuffer.h"
-#include "Avionics_HAL.h"
+#include "abstractions/ITelemetryRadio.h"
+
+#include "Config.h"
+#include "Transport/Fragment.h"
+#include "DataStructure/Buffer/PacketQueue.h"
+#include "Transport/Transport.h"
+#include "Transport/TurnTaking.h"
 
 namespace ra::turtleford
 {
-/**
- * @brief Configuration for LoRa transfer sessions.
- *
- * Contains the peer ID for addressing and a user-defined context pointer.
- * The context can be any user data and is not managed by the transport.
- */
-struct LoraTransferConfig final : public ITransferConfig
+/** @brief Settings of a LoraTransport. Defaults are in Config.h, config::lora. */
+struct LoraTransportConfig
 {
-    struct
-    {
-        uint8_t SelfId;
-        /** @brief Peer identifier for routing messages to specific devices. */
-        uint8_t RecvFrom;
-        /** @brief Local identifier for this device in the session. */
-        uint8_t SendTo;
-    } Addr {};
+    /** @brief Channel table, frequencies in MHz. Both ends must be built with the same one. Index 0 is the default. */
+    std::vector<float> ChannelsMHz = std::vector<float>(config::lora::ChannelsMHz.begin(), config::lora::ChannelsMHz.end());
+    /** @brief Index into ChannelsMHz the radio starts on. Index 0 is used instead if this is not in the table. */
+    ChannelNumber InitialChannel = config::lora::InitialChannel;
 
-public:
     /**
-     * @brief Creates a copy of this configuration.
-     * @return Unique pointer to the cloned configuration.
+     * @brief Our own address, fixed per device. Stamped on every frame we send, and the only
+     * destination the radio accepts frames for. 255 is the radio's broadcast address: do not use it.
      */
-    std::unique_ptr<ITransferConfig> Clone() const override { return std::make_unique<LoraTransferConfig>(*this); }
+    uint8_t Address = config::lora::Address;
+    /**
+     * @brief Address of the one device we talk to. Everything is sent to it, and frames from
+     * any other sender are ignored. The two ends are configured as mirror images of each other.
+     */
+    uint8_t PeerAddress = config::lora::PeerAddress;
 
-public:
-    LoraTransferConfig(uint8_t Peer, uint8_t Local) : Addr {.SelfId = Local, .RecvFrom = Peer, .SendTo = Peer} {}
-    LoraTransferConfig(const LoraTransferConfig&)            = default;
-    LoraTransferConfig& operator=(const LoraTransferConfig&) = default;
+    /** @brief Bytes per LoRa packet, fragment header included. Capped at LoraTransport::MaxFrameSize. */
+    uint16_t FrameSize = config::lora::FrameSize;
+    /**
+     * @brief Largest message accepted, in bytes; anything above FrameSize is chunked. Lowered to what
+     * a Fragmenter of that FrameSize can cut up, if that is less.
+     */
+    uint16_t MaxMessageSize = config::lora::MaxMessageSize;
+
+    /** @brief Time in ms for one frame out and the ack back at the configured modem settings. */
+    uint32_t RoundTripMs = config::lora::RoundTripMs;
+    /** @brief A partly received message is dropped if its next fragment takes longer than this many ms. */
+    uint32_t ReassemblyTimeoutMs = config::lora::ReassemblyTimeoutMs;
+
+    /**
+     * @brief LoRa is half duplex: while we transmit we hear nothing. So whoever has said what it had
+     * to say marks its last message "over" and stays off the air for ListenMs, which is when the
+     * peer gets a message of its own in (a command, an ack). A sender that never stops (telemetry)
+     * says "over" only once per ListenEveryMs. A listener that has not heard "over" waits for it.
+     * Costs a sender in a continuous stream ListenMs out of every ListenEveryMs, and a message that
+     * has to wait for the peer's "over" up to ListenEveryMs. Costs nothing while messages have gaps
+     * between them anyway. ListenEveryMs = 0 turns it all off: messages go out back to back.
+     * Unit: ms.
+     */
+    uint32_t ListenEveryMs = config::lora::ListenEveryMs;
+    /**
+     * @brief How long in ms we stay off the air after a message marked "over", plus up to
+     * ListenMs / config::lora::ListenJitterDivisor at random so two talkers do not keep colliding.
+     * About twice the airtime of what the peer needs to get in, plus both ends' poll intervals.
+     * Unit: ms.
+     */
+    uint32_t ListenMs = config::lora::ListenMs;
+    /**
+     * @brief After the peer's message marked "over" we wait this long before we answer. The peer's
+     * radio only listens again once its application calls receive(), up to one poll interval after
+     * its frame ended, and a frame that starts before that is lost. At least the peer's poll interval.
+     * Unit: ms.
+     */
+    uint32_t ListenGuardMs = config::lora::ListenGuardMs;
 };
 
 /**
- * @brief Manages LoRa communication sessions and radio operations.
+ * @brief LoRa transport on top of HAL::ITelemetryRadio.
  *
- * There should be one manager per physical LoRa radio controller.
- * The manager handles session creation, message queuing, and radio operations.
- * Call Process() frequently to handle send/receive operations.
+ * Everything is allocated in the constructor, including room for config::lora::TxQueueDepth waiting
+ * messages of MaxMessageSize each. The radio must already be initialised (begin() called,
+ * modem parameters set) and must outlive the transport.
+ *
+ * Turn taking (LoraTransportConfig::ListenEveryMs, ListenMs, ListenGuardMs; the logic is in
+ * Transport/TurnTaking.h, this class reports to it what goes out and comes in). The radio cannot hear
+ * while it sends, so two ends have to say when they are listening. A message carries a flag
+ * in its last fragment:
+ *
+ *   - "over": the sender has said what it had to say and now stays off the air for ListenMs
+ *     (plus up to a quarter more at random). A message is marked over when it is the last one in
+ *     the queue, or, if it is bulk (telemetry: one of a stream, more right behind, no answer
+ *     expected), once per ListenEveryMs.
+ *   - "bulk": the message belongs to a stream. Set from the bulk argument of Send().
+ *
+ * On the receiving side:
+ *
+ *   - A message that is not marked over means the peer has more to say: we hold our own messages.
+ *   - A message marked over ends our own wait at once, and after ListenGuardMs we are free to send.
+ *     If it was also bulk (a slot inside a stream) we are free for ListenMs / 2, then hold again.
+ *   - Holding ends by itself when the peer has been silent for a window and half a RoundTripMs (it may
+ *     be quiet for that long in the middle of a stream), or when it has not
+ *     said "over" for 2 x ListenEveryMs.
+ *
+ * Fragments of one message always go out on consecutive polls.
  */
-class LoraTransferManager final : public ITransferManager,
-                                  public std::enable_shared_from_this<LoraTransferManager>
+class LoraTransport final : public ITransport
 {
-private:
-    /**
-     * @brief Represents a thin public-facing LoRa communication session.
-     *
-     * The session is a lightweight wrapper (id + weak manager). Per-session state
-     * (config, callback) is stored in ManagedSession to improve locality and
-     * reduce per-session footprint.
-     */
-    class LoraTransferSession final : public ITransferSession
-    {
-    public:
-        bool Send(std::span<const std::byte> Data) override;
-        void RegisterCallback(ITransferSession::ReceiveCallback Cb) override;
-        bool IsOpen() override;
-        size_t ID() const override;
-        TransportType Transport() const override { return TransportType::Lora; }
-        const ITransferConfig& Config() const override;
-
-    public:
-        ~LoraTransferSession() = default;
-
-    private:
-        LoraTransferSession(std::weak_ptr<LoraTransferManager> Manager, size_t SessionId) :
-            m_Manager(std::move(Manager)), m_SessionId(SessionId)
-        {
-        }
-
-    private:
-        std::weak_ptr<LoraTransferManager> m_Manager;
-        size_t m_SessionId {};
-
-        friend class LoraTransferManager;
-    };
-
 public:
-    /**
-     * @brief Initializes the LoRa manager.
-     * @return True if initialization successful, false otherwise.
-     */
-    bool Init() override { return true; }
+    /** @brief Largest packet the RFM95 driver carries, in bytes. LoraTransportConfig::FrameSize is capped at this. */
+    static constexpr uint16_t MaxFrameSize = 251;
 
     /**
-     * @brief Deinitializes the LoRa manager.
-     * @return True if deinitialization successful, false otherwise.
+     * @param Radio  Must be initialised already and must outlive the transport. Its own address, destination
+     *               address and frequency are set here, and promiscuous mode is turned off.
+     * @param Config Copied. Out of range values are clamped, see the fields of LoraTransportConfig.
      */
-    bool Deinit() override { return true; }
+    LoraTransport(HAL::ITelemetryRadio& Radio, const LoraTransportConfig& Config = {});
+
+    /** @brief See ITransport::Caps(). MaxMessageSize is the size of a queue slot. */
+    const TransportCaps& Caps() const override { return m_Caps; }
+    /** @brief See ITransport::IsReady(). Always true: the radio is there from the start. */
+    bool IsReady() const override { return true; }
 
     /**
-     * @brief Gets the transport type.
-     * @return returns TransportType for this manager.
+     * @brief See ITransport::Send(). The message is copied into the transmit queue.
+     * @param Bytes The message.
+     * @param Bulk  Sets the "bulk" mark on the message, see the class description.
+     * @return False if the message is empty, longer than Caps().MaxMessageSize, or the queue is full.
      */
-    TransportType Transport() const override { return TransportType::Lora; }
+    bool Send(std::span<const std::byte> Bytes, bool Bulk = false) override;
+    /** @brief See ITransport::TxFree(). Free places in the transmit queue. */
+    size_t TxFree() const override { return m_TxQueue.Free(); }
+    /**
+     * @brief See ITransport::TxCompleted(). Counts a message once its last frame is handed to the radio,
+     * or when it is dropped for being unsendable.
+     */
+    uint32_t TxCompleted() const override { return m_TxCompleted; }
+    /** @brief See ITransport::TxIdle(). The queue is empty, no message is half sent and turn taking allows sending. */
+    bool TxIdle() const override { return m_TxQueue.Empty() && m_Fragmenter.Done() && m_Turns.MayTransmit(); }
+    /**
+     * @brief See ITransport::Poll(). Hands at most one frame to the radio, which blocks until it is off the air.
+     * Once a message is started its remaining frames go out on the following polls, one per poll.
+     * @param NowMs Current time.
+     */
+    void Poll(uint32_t NowMs) override;
+    /**
+     * @brief See ITransport::Receive(). Reads up to config::lora::FramesPerReceive frames from the radio per call.
+     * @param NowMs Current time.
+     * @return The next complete message, or an empty span when there is none. Valid until the next call
+     *         to Receive() or Poll().
+     */
+    std::span<const std::byte> Receive(uint32_t NowMs) override;
 
     /**
-     * @brief Creates a new LoRa session with the given configuration.
-     * @param cfg Unique pointer to the LoRa transfer configuration.
-     * @return Shared pointer to the created session, or nullptr if configuration is invalid.
-     *
-     * The session is automatically added to the active session list
-     * The manager takes ownership of the config.
+     * @brief See ITransport::SetChannel(). Tunes the radio to the matching entry of LoraTransportConfig::ChannelsMHz.
+     * @param Channel Index into the channel table.
+     * @return False if the index is not in the table; nothing changes then.
      */
-    std::shared_ptr<ITransferSession> CreateSession(std::unique_ptr<ITransferConfig> Cfg) override;
+    bool SetChannel(ChannelNumber Channel) override;
+    /** @brief See ITransport::Channel(). */
+    ChannelNumber Channel() const override { return m_Channel; }
 
-    /**
-     * @brief Closes and removes a specific session from the manager.
-     * @param Session Reference to the session to close.
-     *
-     * The session will be removed from the managed list.
-     */
-    bool Close(const ITransferSession& Session) override;
-
-    /**
-     * @brief Get a session by its ID.
-     */
-    std::shared_ptr<ITransferSession> GetSession(size_t Id) const override;
-
-    /**
-     * @brief Processes queued messages and handles radio operations.
-     *
-     * This method should be called as frequently as possible to:
-     * - Send queued outgoing messages
-     * - Receive incoming messages from the radio
-     * - Distribute received messages to appropriate session callbacks
-     *
-     * Note: Currently assumes single-threaded operation for receive processing.
-     */
-    void Process() override;
-
-public:
-    /**
-     * @brief Constructs a new LoRa transfer manager.
-     * @param Radio Unique pointer to the _already initialized_ telemetry radio.
-     *
-     * The manager takes ownership of the radio interface.
-     */
-    LoraTransferManager(std::unique_ptr<HAL::ITelemetryRadio> Radio) : m_Radio(std::move(Radio)) {}
+    /** @brief Received frames that were thrown away (not from the peer, broken or incomplete message). */
+    uint32_t DroppedFrames() const { return m_Reassembler.Dropped(); }
 
 private:
-    static constexpr auto LoraMTU = 512;
-    static_assert(LoraMTU > 0, "LoraMTU must be a positive value");
+    HAL::ITelemetryRadio& m_Radio; ///< The radio. Owned by the caller.
+    std::vector<float> m_ChannelsMHz; ///< The channel table, in MHz.
+    TransportCaps m_Caps;             ///< What Caps() returns. Filled in by the constructor.
 
-    bool Send(size_t SessionId, std::span<const std::byte> Data);
+    Fragmenter m_Fragmenter; ///< Cuts the message at the front of m_TxQueue into frames.
+    /**
+     * @brief Messages waiting for the radio, and whether each is bulk; the one being sent stays at the front
+     * until it is out.
+     */
+    bricks::PacketQueue<config::lora::TxQueueDepth> m_TxQueue;
+    Reassembler m_Reassembler;               ///< Puts received frames from the peer back together.
+    std::array<uint8_t, 255> m_RxFrame {};   ///< Where one frame from the radio is read into.
 
-    // Helper methods to set per-session state.
-    void SetCallbackForSession(size_t Id, ITransferSession::ReceiveCallback Cb);
-    bool IsSessionAlive(size_t Id) const;
-    const ITransferConfig* GetConfig(size_t Id) const;
+    uint8_t m_Peer;                          ///< Address of the peer, LoraTransportConfig::PeerAddress.
+    uint32_t m_TxCompleted  = 0;             ///< What TxCompleted() returns.
+    ChannelNumber m_Channel = 0;             ///< Index into m_ChannelsMHz the radio is tuned to.
 
-private:
-    struct ManagedSession
-    {
-        std::shared_ptr<LoraTransferSession> Session;
-        ITransferSession::ReceiveCallback Callback;
-        std::unique_ptr<LoraTransferConfig> Config;
-    };
-
-    struct OutgoingMessage
-    {
-        uint8_t DestinationId;
-        uint8_t SourceId;
-        uint16_t Length;
-        std::array<std::byte, LoraMTU> Data;
-    };
-    static_assert(LoraMTU <= std::numeric_limits<decltype(OutgoingMessage::Length)>::max(),
-                  "LoraMTU exceeds capacity of OutgoingMessage::Length");
-
-private:
-    std::vector<ManagedSession> m_Sessions {}; // Active sessions
-    ra::bricks::CircularBuffer<OutgoingMessage> m_OutgoingMessageQueue {};
-
-    std::unique_ptr<HAL::ITelemetryRadio> m_Radio;
-    // Next session id to assign (monotonic)
-    size_t m_NextSessionId {1};
+    /** @brief Who may transmit, and when to say over (Transport/TurnTaking.h). */
+    TurnTaking m_Turns;
 };
 } // namespace ra::turtleford
